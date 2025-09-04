@@ -144,8 +144,8 @@ Variables d’environnement propagées par `main.sh` aux sous-scripts:
 - `INCLUDE_NODES`, `EXCLUDE_NODES`, `LIMIT_NODES`, `ONLY_NEW`
 - `TOP_MODE`
 - GPU spécifiques:
-	- `BENCH_PYTHON` — chemin de l’interpréteur Python à utiliser (ex: votre Python Conda). Si défini, il prime.
-	- `BENCH_CONDA_ENV` — nom de l’environnement Conda à activer côté nœud (défaut: `bench`) si `BENCH_PYTHON` n’est pas fourni.
+      - `BENCH_PYTHON` — chemin de l’interpréteur Python à utiliser (ex: votre Python Conda). Si défini, il prime.
+      - `BENCH_CONDA_ENV` — nom de l’environnement Conda à activer côté nœud (défaut: `bench`) si `BENCH_PYTHON` n’est pas fourni.
 
 ## Walltime automatique
 
@@ -211,8 +211,8 @@ Conda/pyGPU:
 - Créez/activez l’env: `./main.sh build` prépare un env `bench` si Conda est présent.
 - Utiliser un Python précis avec Slurm: exportez `BENCH_PYTHON=/chemin/vers/conda/envs/bench/bin/python` avant `submit_gpu`.
 - Installation backends (exemples):
-	- PyTorch CUDA (ex.): `conda install -n bench -y -c pytorch pytorch pytorch-cuda=12.1 -c nvidia`
-	- CuPy (ex.): `pip install cupy-cuda12x` (ajustez selon votre CUDA)
+  - PyTorch CUDA (ex.): `conda install -n bench -y -c pytorch pytorch pytorch-cuda=12.1 -c nvidia`
+  - CuPy (ex.): `pip install cupy-cuda12x` (ajustez selon votre CUDA)
 
 ---
 Suggestions ou améliorations bienvenues via issues/PRs.

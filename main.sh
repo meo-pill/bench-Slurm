@@ -1,7 +1,7 @@
 #!/bin/bash
 
-# Routeur des commandes bench CPU via sous-scripts dans src/cmd/
-# Commandes: build | submit | top | status | list
+# Routeur des commandes bench CPU/GPU via sous-scripts dans src/cmd/
+# Commandes: build | submit | submit_cpu | submit_gpu | top | status | list
 
 set -euo pipefail
 
@@ -20,14 +20,15 @@ BENCH_VERBOSE=${BENCH_VERBOSE:-0}      # si 1, verbosité accrue
 LC_ALL=C; export LC_ALL
 
 usage() {
-    echo "Usage: $0 [--repeats N|-r N] [--duration S|-d S] [--include a,b] [--exclude x,y] [--limit N] [--only-new] [--verbose] [--unique|--unique-last|--top10|--by-node-mean] {build|submit|top|status|list}"
+    echo "Usage: $0 [--repeats N|-r N] [--duration S|-d S] [--include a,b] [--exclude x,y] [--limit N] [--only-new] [--verbose] [--unique|--unique-last|--top10|--by-node-mean] {build|submit|submit_cpu|submit_gpu|top|status|list}"
+    echo "Notes: submit est un routeur auto qui lance d'abord submit_gpu puis submit_cpu. Utilisez submit_gpu ou submit_cpu pour forcer."
 }
 
 # Parse CLI flags et commande
 cmd=""
 while [[ $# -gt 0 ]]; do
     case "$1" in
-        build|submit|top|status|list)
+        build|submit|submit_cpu|submit_gpu|top|status|list)
             cmd="$1"; shift ;;
         -r|--repeats)
             BENCH_REPEATS="${2:?valeur manquante pour --repeats}"; shift 2 ;;
@@ -67,8 +68,12 @@ export BENCH_DURATION BENCH_REPEATS TOP_MODE INCLUDE_NODES EXCLUDE_NODES LIMIT_N
 case "$cmd" in
     build)
         bash "$CMD_DIR/build.sh" ;;
-    submit)
+        submit)
         bash "$CMD_DIR/submit.sh" ;;
+        submit_cpu)
+            bash "$CMD_DIR/submit_cpu.sh" ;;
+        submit_gpu)
+            bash "$CMD_DIR/submit_gpu.sh" ;;
     top)
         bash "$CMD_DIR/top.sh" ;;
     status)
