@@ -18,7 +18,7 @@ Répertoires:
 Fichiers principaux:
 
 - `main.sh` — orchestration (build, submit, top, status, list)
-- `bench_job.sh` — job Slurm lancé sur un nœud (exécute mono + multi)
+- `bench_job_cpu.sh` — job Slurm lancé sur un nœud (exécute mono + multi)
 - `cpu_bench.c` — micro-benchmark CPU (OpenMP, calcule un score events/s)
 
 ## Prérequis
