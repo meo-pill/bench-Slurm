@@ -40,14 +40,17 @@ static uint64_t bench_kernel(double duration_s) {
 }
 
 static void usage(const char *prog) {
-    fprintf(stderr, "Usage: %s [--duration <seconds>]\n", prog);
+    fprintf(stderr, "Usage: %s [--duration <seconds>] [--verbose]\n", prog);
 }
 
 int main(int argc, char **argv) {
     double dur = 2.0;
+    int verbose = 0;
     for (int i = 1; i < argc; ++i) {
         if (strcmp(argv[i], "--duration") == 0 && i + 1 < argc) {
             dur = atof(argv[++i]);
+        } else if (strcmp(argv[i], "--verbose") == 0) {
+            verbose = 1;
         } else {
             usage(argv[0]);
             return 1;
@@ -65,6 +68,10 @@ int main(int argc, char **argv) {
         }
     }
 #endif
+
+    if (verbose) {
+        printf("START threads=%d duration=%.3f\n", threads, dur);
+    }
 
     uint64_t total = 0;
 #ifdef _OPENMP
