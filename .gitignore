@@ -26,3 +26,31 @@ slurm-*.err
 *~
 *.swp
 *.swo
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+.python-version
+.venv/
+venv/
+env/
+.env/
+pip-wheel-metadata/
+pip-log.txt
+pip-delete-this-directory.txt
+
+# Packaging
+build/
+dist/
+*.egg-info/
+.eggs/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage*
+coverage.xml
+htmlcov/
+
+# Jupyter
+.ipynb_checkpoints/

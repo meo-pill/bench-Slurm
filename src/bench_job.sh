@@ -33,7 +33,7 @@ NATIVE_BIN="$BIN_DIR/bench-$HOST"
 # Construire le binaire natif via le Makefile (dans bin/)
 if [[ ! -x "$NATIVE_BIN" ]]; then
   (( VERBOSE == 1 )) && echo "[bench] build native for host=$HOST into $NATIVE_BIN"
-  make -C "$ROOT_DIR" native-host HOSTNAME="$HOST" >/dev/null 2>&1 || true
+  make -C "$ROOT_DIR/src" native-host HOSTNAME="$HOST" PREFIX="$ROOT_DIR" >/dev/null 2>&1 || true
 fi
 
 # Choix du binaire: natif si dispo, sinon générique

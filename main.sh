@@ -13,7 +13,7 @@ ROOT_DIR=$(cd "$(dirname "$0")" && pwd)
 BIN_DIR="$ROOT_DIR/bin"
 RES_DIR="$ROOT_DIR/results"
 OUT_DIR="$ROOT_DIR/outputs"
-JOB_SCRIPT="$ROOT_DIR/bench_job.sh"
+JOB_SCRIPT="$ROOT_DIR/src/bench_job.sh"
 JOB_NAME="bench_cpu_node"
 BENCH_DURATION=${BENCH_DURATION:-2.0}  # secondes par mesure
 BENCH_REPEATS=${BENCH_REPEATS:-3}      # répétitions pour moyenne/écart-type
@@ -31,7 +31,7 @@ mkdir -p "$BIN_DIR" "$RES_DIR" "$OUT_DIR"
 build() {
     check_deps build
     echo "[build] Compilation du binaire…"
-    make -C "$ROOT_DIR" bench
+    make -C "$ROOT_DIR/src" PREFIX="$ROOT_DIR" bench
     chmod +x "$JOB_SCRIPT"
 }
 

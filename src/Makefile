@@ -11,7 +11,7 @@ endif
 ARCHFLAGS ?= -march=x86-64 -mtune=generic
 CFLAGS ?= -O3 $(ARCHFLAGS) $(OMPFLAGS) -Wall -Wextra
 LDFLAGS ?= $(OMPFLAGS) -lm
-PREFIX ?= $(CURDIR)
+PREFIX ?= $(CURDIR)/..
 BIN_DIR := $(PREFIX)/bin
 SRC := cpu_bench.c
 BIN := $(BIN_DIR)/cpu_bench
