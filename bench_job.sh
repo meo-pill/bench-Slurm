@@ -12,6 +12,7 @@ HOST=$(hostname -s)
 CPUS=${SLURM_CPUS_ON_NODE:-$(nproc)}
 DUR=${BENCH_DURATION:-2.0}
 REPEATS=${BENCH_REPEATS:-3}
+VERBOSE=${BENCH_VERBOSE:-0}
 
 # Empêcher une exécution concurrente si le répertoire est partagé
 lockfile="$RES_DIR/.lock.$HOST"
@@ -52,7 +53,11 @@ run_mode() {
   # collecte des scores
   scores=()
   for ((i=1;i<=REPEATS;i++)); do
-    score=$("$BENCH_BIN" --duration "$DUR" | awk '/SCORE/{print $2}')
+    if (( VERBOSE == 1 && i == 1 )); then
+      score=$("$BENCH_BIN" --duration "$DUR" --verbose | awk '/SCORE/{print $2}')
+    else
+      score=$("$BENCH_BIN" --duration "$DUR" | awk '/SCORE/{print $2}')
+    fi
     echo "[$label] run $i/$REPEATS: $score"
     scores+=("$score")
   done

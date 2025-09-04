@@ -22,6 +22,7 @@ INCLUDE_NODES=""                       # liste séparée par des virgules
 EXCLUDE_NODES=""                       # liste séparée par des virgules
 LIMIT_NODES=""                         # limite numérique d'envoi
 ONLY_NEW=0                              # si 1, ne lance que sur nœuds sans résultats
+BENCH_VERBOSE=${BENCH_VERBOSE:-0}       # si 1, active --verbose dans cpu_bench (1er run)
 LC_ALL=C
 export LC_ALL
 
@@ -158,7 +159,7 @@ submit() {
                         --time="$wall" \
             --output "$OUT_DIR/bench_%N.out" \
             --error  "$OUT_DIR/bench_%N.err" \
-            --export=ALL,BENCH_ROOT="$ROOT_DIR",BENCH_DURATION="$BENCH_DURATION",BENCH_REPEATS="$BENCH_REPEATS" \
+            --export=ALL,BENCH_ROOT="$ROOT_DIR",BENCH_DURATION="$BENCH_DURATION",BENCH_REPEATS="$BENCH_REPEATS",BENCH_VERBOSE="$BENCH_VERBOSE" \
             "$JOB_SCRIPT"
         else
             echo "[submit] $NODE n'est plus idle, on saute."
@@ -233,7 +234,7 @@ list() {
 }
 
 usage() {
-    echo "Usage: $0 [--repeats N|-r N] [--duration S|-d S] [--include a,b] [--exclude x,y] [--limit N] [--only-new] [--unique|--unique-last|--top10|--by-node-mean] {build|submit|top|status|list}"
+    echo "Usage: $0 [--repeats N|-r N] [--duration S|-d S] [--include a,b] [--exclude x,y] [--limit N] [--only-new] [--verbose] [--unique|--unique-last|--top10|--by-node-mean] {build|submit|top|status|list}"
 }
 
 # Parse CLI flags and command
@@ -254,6 +255,8 @@ while [[ $# -gt 0 ]]; do
         LIMIT_NODES="${2:?valeur manquante pour --limit}"; shift 2 ;;
     --only-new)
         ONLY_NEW=1; shift ;;
+    --verbose)
+        BENCH_VERBOSE=1; shift ;;
     --unique)
         TOP_MODE="unique"; shift ;;
     --unique-last)
