@@ -1,0 +1,28 @@
+# Build artifacts
+bin/
+*.o
+*.a
+*.so
+*.dylib
+*.dll
+*.exe
+
+# Benchmark outputs
+results/
+outputs/
+*.csv
+
+# Slurm and run logs
+slurm-*.out
+slurm-*.err
+*.out
+*.err
+*.log
+*.build.log
+
+# Editors/IDE
+.vscode/
+.idea/
+*~
+*.swp
+*.swo
