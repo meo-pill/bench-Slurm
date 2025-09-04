@@ -148,19 +148,27 @@ submit() {
         if sinfo -h -N -t idle -o '%N' | grep -qx "$NODE"; then
             echo "[submit] Soumission sur $NODE"
             CPUS_NODE=$(sinfo -h -n "$NODE" -o '%c' | tr -d ' ')
-            sbatch \
-            --job-name "$JOB_NAME" \
-            --nodelist "$NODE" \
-            --nodes 1 \
-            --ntasks-per-node 1 \
-            --cpus-per-task "$CPUS_NODE" \
-            --exclusive \
-            --mem=0 \
-                        --time="$wall" \
-            --output "$OUT_DIR/bench_%N.out" \
-            --error  "$OUT_DIR/bench_%N.err" \
-            --export=ALL,BENCH_ROOT="$ROOT_DIR",BENCH_DURATION="$BENCH_DURATION",BENCH_REPEATS="$BENCH_REPEATS",BENCH_VERBOSE="$BENCH_VERBOSE" \
-            "$JOB_SCRIPT"
+            sb_cmd=( sbatch
+                --job-name "$JOB_NAME"
+                --nodelist "$NODE"
+                --nodes 1
+                --ntasks-per-node 1
+                --cpus-per-task "$CPUS_NODE"
+                --exclusive
+                --mem=0
+                --time "$wall"
+                --output "$OUT_DIR/bench_%N.out"
+                --error "$OUT_DIR/bench_%N.err"
+                --export "ALL,BENCH_ROOT=$ROOT_DIR,BENCH_DURATION=$BENCH_DURATION,BENCH_REPEATS=$BENCH_REPEATS,BENCH_VERBOSE=$BENCH_VERBOSE"
+                "$JOB_SCRIPT" )
+
+            if (( BENCH_VERBOSE == 1 )); then
+                printf '[submit] CMD: '
+                printf '%q ' "${sb_cmd[@]}"
+                echo
+            fi
+
+            "${sb_cmd[@]}"
         else
             echo "[submit] $NODE n'est plus idle, on saute."
         fi
