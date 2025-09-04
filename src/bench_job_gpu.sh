@@ -7,24 +7,71 @@ set -euo pipefail
 ROOT_DIR=${BENCH_ROOT:?BENCH_ROOT non défini}
 OUT_DIR="$ROOT_DIR/outputs"
 SRC_DIR="$ROOT_DIR/src"
+RES_DIR="$ROOT_DIR/results"
+PY=${BENCH_PYTHON:-python3}
+
+# Optionnel: activer un environnement Conda (par défaut: 'bench') si BENCH_PYTHON n'est pas fourni
+activate_conda_env() {
+  local env_name
+  env_name=${BENCH_CONDA_ENV:-bench}
+
+  # Si un interpréteur explicite est fourni, ne pas activer conda
+  if [[ -n "${BENCH_PYTHON:-}" ]]; then
+    return 0
+  fi
+
+  # Initialiser conda dans ce shell si possible
+  if ! command -v conda >/dev/null 2>&1; then
+    if [[ -n "${CONDA_EXE:-}" ]]; then
+      eval "$("$CONDA_EXE" shell.bash hook)" >/dev/null 2>&1 || true
+    elif [[ -f "$HOME/miniconda3/etc/profile.d/conda.sh" ]]; then
+      # shellcheck source=/dev/null
+      source "$HOME/miniconda3/etc/profile.d/conda.sh" || true
+    elif [[ -f "$HOME/anaconda3/etc/profile.d/conda.sh" ]]; then
+      # shellcheck source=/dev/null
+      source "$HOME/anaconda3/etc/profile.d/conda.sh" || true
+    fi
+  fi
+
+  if ! command -v conda >/dev/null 2>&1; then
+    echo "[gpu] Conda introuvable, pas d'activation d'environnement." >&2
+    return 0
+  fi
+
+  # Vérifier l'existence de l'environnement
+  if ! conda env list | awk '{print $1}' | grep -qx "$env_name"; then
+    echo "[gpu] Environnement Conda '$env_name' absent, pas d'activation." >&2
+    return 0
+  fi
+
+  # Activer l'environnement; si succès, 'python3' pointera vers cet env
+  # shellcheck disable=SC1090
+  conda activate "$env_name" 2>/dev/null || {
+    echo "[gpu] Échec activation Conda '$env_name' (non bloquant)." >&2
+    return 0
+  }
+  echo "[gpu] Environnement Conda activé: $env_name"
+}
+
+activate_conda_env
 
 HOST=$(hostname -s)
 DUR=${BENCH_DURATION:-2.0}
 REPEATS=${BENCH_REPEATS:-3}
 VERBOSE=${BENCH_VERBOSE:-0}
 
-mkdir -p "$OUT_DIR"
+mkdir -p "$OUT_DIR" "$RES_DIR"
 
 # Vérifie python3 et qu'au moins un backend GPU est disponible (torch/cupy/numba/pyopencl)
 check_deps() {
   local missing=()
-  command -v python3 >/dev/null 2>&1 || missing+=("python3")
+  command -v "$PY" >/dev/null 2>&1 || missing+=("python")
   if (( ${#missing[@]} > 0 )); then
   echo "Dépendances manquantes: ${missing[*]}" >&2
   # Ne marque pas le job en échec
   exit 0
   fi
-  if ! python3 - <<'PY'
+  if ! "$PY" - <<'PY'
 import sys
 ok = False
 try:
@@ -85,8 +132,8 @@ if ! ( set -o noclobber; : >"$lockfile" ) 2>/dev/null; then
 fi
 trap 'rm -f "$lockfile"' EXIT
 
-# Commande bench GPU (écrit une seule ligne dans outputs/gpu_<node>.csv)
-CMD=(python3 "$SRC_DIR/gpu_bench.py" --duration "$DUR" --repeats "$REPEATS" --node "$HOST")
+# Commande bench GPU (écrit une seule ligne dans results/gpu_<node>.csv)
+CMD=("$PY" "$SRC_DIR/gpu_bench.py" --duration "$DUR" --repeats "$REPEATS" --node "$HOST" --csv-dir "$RES_DIR")
 (( VERBOSE == 1 )) && CMD+=(--verbose)
 
 # Lancer en laissant stderr aller au .err Slurm; ne pas faire échouer le job
@@ -101,7 +148,7 @@ if (( rc != 0 )); then
   exit 0
 fi
 
-csv="$OUT_DIR/gpu_${HOST}.csv"
+csv="$RES_DIR/gpu_${HOST}.csv"
 if [[ -f "$csv" ]]; then
   echo "[gpu] Bench terminé. Ligne ajoutée dans: $csv"
 else

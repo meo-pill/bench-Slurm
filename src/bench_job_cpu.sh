@@ -48,8 +48,8 @@ if [[ ! -x "$BENCH_BIN" ]]; then
   exit 1
 fi
 
-# Fichier résultat CSV par nœud
-CSV="$RES_DIR/$HOST.csv"
+# Fichier résultat CSV par nœud (préfixé)
+CSV="$RES_DIR/cpu_$HOST.csv"
 if [[ ! -f "$CSV" ]]; then
   echo "node,mode,threads,runs,duration_s,avg_events_per_s,stddev_events_per_s,timestamp" >"$CSV"
 fi
