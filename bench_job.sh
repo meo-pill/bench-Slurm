@@ -68,10 +68,21 @@ run_mode() {
   # collecte des scores
   scores=()
   for ((i=1;i<=REPEATS;i++)); do
-    if (( VERBOSE == 1 && i == 1 )); then
-      score=$("$BENCH_BIN" --duration "$DUR" --verbose | awk '/SCORE/{print $2}')
-    else
-      score=$("$BENCH_BIN" --duration "$DUR" | awk '/SCORE/{print $2}')
+    extra=""
+    (( VERBOSE == 1 && i == 1 )) && extra="--verbose"
+    # Exécuter en capturant stdout tout en laissant stderr aller au fichier .err de Slurm
+    set +e
+    output=$("$BENCH_BIN" --duration "$DUR" $extra 2> >(tee >&2))
+    rc=$?
+    set -e
+    if (( rc != 0 )); then
+      echo "[$label] run $i/$REPEATS: échec (rc=$rc)" >&2
+      continue
+    fi
+    score=$(awk '/SCORE/{print $2}' <<<"$output")
+    if [[ -z "$score" ]]; then
+      echo "[$label] run $i/$REPEATS: aucun SCORE détecté" >&2
+      continue
     fi
     echo "[$label] run $i/$REPEATS: $score"
     scores+=("$score")
