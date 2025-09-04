@@ -26,10 +26,25 @@ trap 'rm -f "$lockfile"' EXIT
 export OMP_PROC_BIND=close
 export OMP_PLACES=cores
 
-# Chemin du binaire
-BENCH_BIN="$BIN_DIR/cpu_bench"
+# Prépare les binaires dans le dossier bin du projet
+GENERIC_BIN="$BIN_DIR/cpu_bench"
+NATIVE_BIN="$BIN_DIR/bench-$HOST"
+
+# Construire le binaire natif via le Makefile (dans bin/)
+if [[ ! -x "$NATIVE_BIN" ]]; then
+  (( VERBOSE == 1 )) && echo "[bench] build native for host=$HOST into $NATIVE_BIN"
+  make -C "$ROOT_DIR" native-host HOSTNAME="$HOST" >/dev/null 2>&1 || true
+fi
+
+# Choix du binaire: natif si dispo, sinon générique
+if [[ -x "$NATIVE_BIN" ]]; then
+  BENCH_BIN="$NATIVE_BIN"
+  (( VERBOSE == 1 )) && echo "[bench] Using native binary: $BENCH_BIN"
+else
+  BENCH_BIN="$GENERIC_BIN"
+fi
 if [[ ! -x "$BENCH_BIN" ]]; then
-  echo "Binaire $BENCH_BIN introuvable, compilation requise." >&2
+  echo "Aucun binaire exécutable trouvé (ni natif: $NATIVE_BIN, ni générique: $GENERIC_BIN)." >&2
   exit 1
 fi
 

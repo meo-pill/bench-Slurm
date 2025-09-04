@@ -174,7 +174,7 @@ submit() {
         fi
     done
     
-    echo "[submit] Soumissions terminées. Surveillez: squeue -u $USER -n $JOB_NAME"
+    echo "[submit] Soumissions terminées."
 }
 
 top() {
