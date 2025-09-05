@@ -121,8 +121,8 @@ for NODE in "${GPU_NODES[@]}"; do
       --gres=gpu:"$TOTAL_GPU"
       --mem=20G
       --time "$wall"
-  --output "$OUT_DIR/bench_%N_gpu.out"
-  --error "$OUT_DIR/bench_%N_gpu.err"
+      --output "$OUT_DIR/bench_%N_gpu.out"
+      --error "$OUT_DIR/bench_%N_gpu.err"
       --export "ALL,BENCH_ROOT=$ROOT_DIR,BENCH_DURATION=$BENCH_DURATION,BENCH_REPEATS=$BENCH_REPEATS,BENCH_VERBOSE=$BENCH_VERBOSE"
       "$JOB_SCRIPT" )
 

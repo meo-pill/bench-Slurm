@@ -20,7 +20,7 @@ check_deps submit
 # build préalable
 "$SCRIPT_DIR/build.sh"
 
-echo "[submit-cpu] Détection des nœuds pour soumission (idle ∪ avec bench_gpu en cours)..."
+echo "[submit-cpu] Détection des nœuds pour soumission (idle ou avec bench_gpu uniquement en cours)..."
 
 # Nœuds idle
 mapfile -t IDLE_NODES < <(idle_nodes)
@@ -35,7 +35,27 @@ get_nodes_running_bench_gpu() {
 }
 mapfile -t GPU_BENCH_NODES < <(get_nodes_running_bench_gpu || true)
 
-# Union des deux listes
+# Filtrer: ne garder que les nœuds où tous les jobs RUNNING sont des jobs bench GPU
+bench_only_gpu_nodes() {
+	local job_gpu="bench_gpu_node"
+	local out=()
+	for n in "$@"; do
+		# Liste des noms de jobs RUNNING sur ce nœud
+		mapfile -t JN < <(squeue -h --states=RUNNING -w "$n" -o "%j" | sort -u)
+		local ok=1
+		for j in "${JN[@]:-}"; do
+			[[ "$j" == "$job_gpu" ]] || { ok=0; break; }
+		done
+		(( ok )) && out+=("$n")
+	done
+	printf '%s\n' "${out[@]:-}"
+}
+
+if (( ${#GPU_BENCH_NODES[@]} > 0 )); then
+	mapfile -t GPU_BENCH_NODES < <(bench_only_gpu_nodes "${GPU_BENCH_NODES[@]}" || true)
+fi
+
+# Union des deux listes (idle ∪ gpu-bench-only)
 mapfile -t NODES < <( { printf '%s\n' "${IDLE_NODES[@]:-}"; printf '%s\n' "${GPU_BENCH_NODES[@]:-}"; } | awk 'NF' | sort -u )
 
 if [[ ${#NODES[@]} -eq 0 ]]; then
@@ -45,7 +65,7 @@ fi
 
 (( BENCH_VERBOSE == 1 )) && {
 	echo "[submit-cpu] Idle: ${IDLE_NODES[*]:-none}"
-	echo "[submit-cpu] GPU-bench: ${GPU_BENCH_NODES[*]:-none}"
+	echo "[submit-cpu] GPU-bench-only: ${GPU_BENCH_NODES[*]:-none}"
 }
 echo "[submit-cpu] Nœuds ciblés (union): ${NODES[*]}"
 
