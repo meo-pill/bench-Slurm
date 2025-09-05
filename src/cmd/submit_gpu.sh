@@ -99,7 +99,7 @@ if [[ ${#GPU_NODES[@]} -eq 0 ]]; then
   exit 0
 fi
 
-wall_s=$(estimate_walltime)*GPU_WALLTIME_FACTOR
+wall_s="$(estimate_walltime)*$GPU_WALLTIME_FACTOR"
 wall=$(fmt_hms "$wall_s")
 echo "[submit-gpu] Walltime estimé: $wall (sec=$wall_s)"
 
