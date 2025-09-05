@@ -13,8 +13,12 @@ BENCH_VERBOSE=${BENCH_VERBOSE:-0}
 INCLUDE_NODES=${INCLUDE_NODES:-}
 EXCLUDE_NODES=${EXCLUDE_NODES:-}
 LIMIT_NODES=${LIMIT_NODES:-}
+GPU_WALLTIME_FACTOR=${GPU_WALLTIME_FACTOR:-10.0}  # facteur multiplicatif pour walltime GPU
 
 check_deps submit
+
+# build préalable
+"$SCRIPT_DIR/build.sh"
 
 # Fonction issue de src/list_free_gpu.sh: liste les nœuds avec GPU tous libres
 get_busy_gpu_nodes() {
@@ -95,7 +99,7 @@ if [[ ${#GPU_NODES[@]} -eq 0 ]]; then
   exit 0
 fi
 
-wall_s=$(estimate_walltime)
+wall_s=$(estimate_walltime)*GPU_WALLTIME_FACTOR
 wall=$(fmt_hms "$wall_s")
 echo "[submit-gpu] Walltime estimé: $wall (sec=$wall_s)"
 
@@ -117,8 +121,8 @@ for NODE in "${GPU_NODES[@]}"; do
       --gres=gpu:"$TOTAL_GPU"
       --mem=20G
       --time "$wall"
-      --output "$OUT_DIR/bench_%N.out"
-      --error "$OUT_DIR/bench_%N.err"
+  --output "$OUT_DIR/bench_%N_gpu.out"
+  --error "$OUT_DIR/bench_%N_gpu.err"
       --export "ALL,BENCH_ROOT=$ROOT_DIR,BENCH_DURATION=$BENCH_DURATION,BENCH_REPEATS=$BENCH_REPEATS,BENCH_VERBOSE=$BENCH_VERBOSE"
       "$JOB_SCRIPT" )
 

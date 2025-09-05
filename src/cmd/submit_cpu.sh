@@ -20,13 +20,13 @@ check_deps submit
 # build préalable
 "$SCRIPT_DIR/build.sh"
 
-echo "[submit] Détection des nœuds idle…"
+echo "[submit-cpu] Détection des nœuds idle…"
 mapfile -t NODES < <(idle_nodes)
 if [[ ${#NODES[@]} -eq 0 ]]; then
 	echo "Aucun nœud idle trouvé." >&2
 	exit 1
 fi
-echo "[submit] ${#NODES[@]} nœud(s) idle: ${NODES[*]}"
+echo "[submit-cpu] ${#NODES[@]} nœud(s) idle: ${NODES[*]}"
 
 # include
 if [[ -n "$INCLUDE_NODES" ]]; then
@@ -78,17 +78,17 @@ if (( ONLY_NEW )); then
 fi
 
 if [[ ${#NODES[@]} -eq 0 ]]; then
-	echo "[submit] Aucun nœud à soumettre après filtres." >&2
+	echo "[submit-cpu] Aucun nœud à soumettre après filtres." >&2
 	exit 0
 fi
 
 wall_s=$(estimate_walltime)
 wall=$(fmt_hms "$wall_s")
-echo "[submit] Walltime estimé: $wall (sec=$wall_s)"
+echo "[submit-cpu] Walltime estimé: $wall (sec=$wall_s)"
 
 for NODE in "${NODES[@]}"; do
 	if sinfo -h -N -t idle -o '%N' | grep -qx "$NODE"; then
-		echo "[submit] Soumission sur $NODE"
+		echo "[submit-cpu] Soumission sur $NODE"
 		CPUS_NODE=$(sinfo -h -n "$NODE" -o '%c' | tr -d ' ')
 		sb_cmd=( sbatch
 			--job-name "$JOB_NAME"
@@ -99,21 +99,21 @@ for NODE in "${NODES[@]}"; do
 			--exclusive
 			--mem=0
 			--time "$wall"
-			--output "$OUT_DIR/bench_%N.out"
-			--error "$OUT_DIR/bench_%N.err"
+			--output "$OUT_DIR/bench_%N_cpu.out"
+			--error "$OUT_DIR/bench_%N_cpu.err"
 			--export "ALL,BENCH_ROOT=$ROOT_DIR,BENCH_DURATION=$BENCH_DURATION,BENCH_REPEATS=$BENCH_REPEATS,BENCH_VERBOSE=$BENCH_VERBOSE"
 			"$JOB_SCRIPT" )
 
 		if (( BENCH_VERBOSE == 1 )); then
-			printf '[submit] CMD: '
+			printf '[submit-cpu] CMD: '
 			printf '%q ' "${sb_cmd[@]}"
 			echo
 		fi
 		"${sb_cmd[@]}"
 	else
-		echo "[submit] $NODE n'est plus idle, on saute."
+		echo "[submit-cpu] $NODE n'est plus idle, on saute."
 	fi
 done
 
-echo "[submit] Soumissions terminées."
+echo "[submit-cpu] Soumissions terminées."
 

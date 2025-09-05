@@ -14,9 +14,15 @@ fi
 
 case "$MODE" in
   cpu)
-    exec bash "$SCRIPT_DIR/submit_cpu.sh" "$@" ;;
+  bash "$SCRIPT_DIR/submit_cpu.sh" "$@"
+  # Lancer le cleanup en arrière-plan
+  bash "$SCRIPT_DIR/cleanup_err_empty.sh" >/dev/null 2>&1 &
+  ;;
   gpu)
-    exec bash "$SCRIPT_DIR/submit_gpu.sh" "$@" ;;
+  bash "$SCRIPT_DIR/submit_gpu.sh" "$@"
+  # Lancer le cleanup en arrière-plan
+  bash "$SCRIPT_DIR/cleanup_err_empty.sh" >/dev/null 2>&1 &
+  ;;
   auto)
     # Par défaut: appliquer GPU puis CPU; échouer seulement si les deux échouent
     bash "$SCRIPT_DIR/submit_gpu.sh" "$@"; rc_gpu=$?
@@ -27,7 +33,9 @@ case "$MODE" in
     if (( rc_cpu != 0 )); then
       echo "[submit] Soumission CPU non aboutie (rc=$rc_cpu)" >&2
     fi
-    if (( rc_gpu != 0 && rc_cpu != 0 )); then
+  # Lancer le cleanup en arrière-plan
+  bash "$SCRIPT_DIR/cleanup_err_empty.sh" >/dev/null 2>&1 &
+  if (( rc_gpu != 0 && rc_cpu != 0 )); then
       exit 1
     else
       exit 0
