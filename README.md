@@ -101,6 +101,7 @@ Remarques GPU:
 - `--exclude nX,nY` — exclure ces nœuds
 - `--limit N` — limiter au N premiers nœuds après filtres
 - `--only-new` — ne lancer que sur les nœuds sans résultats
+- `--verbose` — sortie plus détaillée (traces de soumission, commandes sbatch)
 
 Options de « top » (sélection d’un mode; défaut: `--unique`):
 
@@ -180,6 +181,56 @@ node,runs,duration_s,timestamp,(<backend>_mono_avg,<backend>_mono_std,<backend>_
 ```
 
 où `<backend>` ∈ {torch, cupy, numba, opencl} selon disponibilité.
+
+## Exemples complets (tous paramètres)
+
+Exemple soumission GPU (non exclusive) avec toutes les options CLI et variables d'environnement utiles:
+
+```bash
+# (optionnel) forcer l'interpréteur Python et/ou activer un env Conda côté nœud
+export BENCH_PYTHON=/chemin/vers/conda/envs/bench/bin/python
+export BENCH_CONDA_ENV=bench
+
+# soumettre uniquement sur certains nœuds, en exclure d'autres, limiter le nombre,
+# avec 5 répétitions de 3 secondes, uniquement si pas de résultats, en mode verbeux
+./main.sh --repeats 5 \
+          --duration 3 \
+          --include n1,n2 \
+          --exclude n3 \
+          --limit 2 \
+          --only-new \
+          --verbose \
+          submit --gpu
+```
+
+Exemple soumission CPU avec le même jeu d'options:
+
+```bash
+./main.sh --repeats 5 \
+          --duration 3 \
+          --include n1,n2 \
+          --exclude n3 \
+          --limit 2 \
+          --only-new \
+          --verbose \
+          submit --cpu
+```
+
+Exemples « top » avec les différents modes disponibles:
+
+```bash
+# meilleur run par nœud (défaut)
+./main.sh --unique top
+
+# dernier run par nœud
+./main.sh --unique-last top
+
+# top 10 toutes runs confondues
+./main.sh --top10 top
+
+# classement par moyenne (± écart-type) par nœud
+./main.sh --by-node-mean top
+```
 
 ## Détails techniques
 
