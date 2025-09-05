@@ -30,7 +30,7 @@ Fichiers principaux:
 - Slurm: `sinfo`, `sbatch`, `squeue`
 - Build: `make`, `gcc` ou `clang` avec support OpenMP, `libm`
 - Outils shell: `awk`, `sort`, `nl`, `tr`
-- GPU (optionnel): Python 3.x et au moins un backend parmi `torch`, `cupy`, `numba`, `pyopencl` (installables dans un env Conda)
+- GPU (obligatoire): un environnement Conda actif (voir ci-dessous) contenant Python 3.x et au moins un backend parmi `torch`, `cupy`, `numba`, `pyopencl`.
 
 ## Compilation
 
@@ -40,7 +40,7 @@ Fichiers principaux:
 
 Le binaire est produit dans `bin/cpu_bench`.
 
-Si Conda est disponible, `build` prépare aussi un environnement facultatif `bench` et y installe des dépendances de base (numpy, numba, pyopencl). Vous pourrez ensuite l’utiliser pour le bench GPU.
+Si Conda est disponible, `build` prépare aussi un environnement `bench` et y installe des dépendances de base (numpy, numba, pyopencl). Cet environnement (ou un autre équivalent) est requis pour le bench GPU. Activez-le avant exécution côté nœud ou laissez le job GPU l’activer.
 
 ## Utilisation rapide
 
@@ -92,6 +92,13 @@ Remarques GPU:
 
 - Le runner GPU écrit une seule ligne par exécution dans `results/gpu_<node>.csv`.
 - Le « top » inclut des sections GPU qui agrègent par moyenne des backends disponibles (torch/cupy/numba/opencl), en mono et multi.
+
+Conda (obligatoire pour GPU):
+
+- Un environnement Conda actif est requis lors de l’exécution du runner GPU.
+- Si aucun environnement n’est actif, l’exécution échoue immédiatement (code de retour 3).
+- Le runner accepte l’option `--conda-env <name>` pour vérifier que le nom de l’environnement actif correspond.
+- Même si vous fournissez `BENCH_PYTHON`, un environnement Conda actif reste nécessaire.
 
 ## Options communes
 
@@ -145,8 +152,8 @@ Variables d’environnement propagées par `main.sh` aux sous-scripts:
 - `INCLUDE_NODES`, `EXCLUDE_NODES`, `LIMIT_NODES`, `ONLY_NEW`
 - `TOP_MODE`
 - GPU spécifiques:
-      - `BENCH_PYTHON` — chemin de l’interpréteur Python à utiliser (ex: votre Python Conda). Si défini, il prime.
-      - `BENCH_CONDA_ENV` — nom de l’environnement Conda à activer côté nœud (défaut: `bench`) si `BENCH_PYTHON` n’est pas fourni.
+  - `BENCH_PYTHON` — chemin de l’interpréteur Python (souvent celui de votre env Conda). Note: un env Conda actif est requis de toute façon.
+  - `BENCH_CONDA_ENV` — nom de l’environnement Conda à activer côté nœud (défaut: `bench`). En cas d’échec d’activation, le job GPU échoue.
 
 ## Walltime automatique
 
@@ -244,7 +251,8 @@ Remarques GPU:
 
 - Le bench GPU Python détecte dynamiquement les backends disponibles (torch, cupy, numba, pyopencl).
 - Structure séparée: `gpu_bench_core.py` (fonctions de bench) et `gpu_bench.py` (runner + CSV).
-- Le job GPU utilise `BENCH_PYTHON` si fourni; sinon tente d’activer l’environnement Conda `bench` (ou `BENCH_CONDA_ENV`) puis retombe sur `python3`.
+- Le job GPU tente d’activer l’environnement Conda `BENCH_CONDA_ENV` (défaut `bench`). Si l’environnement n’est pas actif après cette étape, l’exécution échoue (pas de repli sur `python3`).
+- Le runner `gpu_bench.py` peut valider le nom via `--conda-env <name>` et refusera de s’exécuter sans env Conda actif.
 
 ## Nettoyage
 

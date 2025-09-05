@@ -23,16 +23,63 @@ from gpu_bench_core import (
 )
 
 
+def display_result(backend: str, mode: str, threads: int, duration: float, avg: float, std: float, runs: int) -> None:
+    """Affichage standardisé d'un résultat de bench.
+
+    Imprime des lignes faciles à parser:
+    BACKEND <backend>\n
+    MODE <mode>\n
+    THREADS <threads>\n
+    DURATION <duration>\n
+    SCORE <avg>\n
+    STD <std>\n
+    RUNS <runs>
+    """
+    print(f'BACKEND {backend}')
+    print(f'MODE {mode}')
+    print(f'THREADS {threads}')
+    print(f'DURATION {duration:.3f}')
+    print(f'SCORE {avg:.3f}')
+    print(f'STD {std:.3f}')
+    print(f'RUNS {runs}')
+
+def ensure_conda_active(expected_name: str | None = None) -> None:
+    """Vérifie qu'un environnement conda est actif, sinon bloque l'exécution.
+
+    Si expected_name est fourni, vérifie que l'env actif correspond.
+    En cas d'échec, imprime un message d'erreur sur stderr et quitte avec code 3.
+    """
+    env = os.environ.get('CONDA_DEFAULT_ENV')
+    prefix = os.environ.get('CONDA_PREFIX')
+    if not env and not prefix:
+        print("[error] Un environnement conda actif est requis. Activez-le (conda activate <env>) avant d'exécuter gpu_bench.py.", file=sys.stderr)
+        sys.exit(3)
+    if expected_name:
+        ok = False
+        if env and env == expected_name:
+            ok = True
+        if prefix and (prefix.rstrip('/').endswith('/'+expected_name) or os.path.basename(prefix.rstrip('/')) == expected_name):
+            ok = True
+        if not ok:
+            cur = env or prefix or '(inconnu)'
+            print(f"[error] L'environnement conda actif ('{cur}') ne correspond pas à l'environnement requis '{expected_name}'.", file=sys.stderr)
+            sys.exit(3)
+
+
 def main():
     p = argparse.ArgumentParser(description='GPU compute benchmark (Python). Exécute toujours mono et multi pour chaque backend disponible.')
     p.add_argument('--duration', type=float, default=2.0, help='durée cible en secondes')
     p.add_argument('--size', type=int, default=1<<23, help='taille du vecteur (peut être réduit si OOM)')
     p.add_argument('--repeats', type=int, default=3, help='nombre de répétitions pour moyenne/écart-type')
     p.add_argument('--verbose', action='store_true')
+    p.add_argument('--conda-env', type=str, default=None, help="nom de l'environnement conda requis (obligatoire: un conda actif doit être présent)")
     # outputs sous la racine du projet (parent de src)
     p.add_argument('--csv-dir', type=str, default=os.path.join(os.path.dirname(os.path.dirname(__file__)), 'outputs'), help='répertoire pour stocker le CSV consolidé')
     p.add_argument('--node', type=str, default=socket.gethostname().split('.')[0], help='nom du nœud pour les CSV')
     args = p.parse_args()
+
+    # Vérifie conda actif et (optionnellement) le nom d'env requis
+    ensure_conda_active(args.conda_env)
 
     backends = ['torch','cupy','numba','opencl']
 
@@ -98,7 +145,7 @@ def main():
                     if args.verbose:
                         print(f"[torch mono] run {i+1}/{args.repeats}: {s1:.3f}")
                 avg, std = calc_stats(vals)
-                print('THREADS 1'); print(f'DURATION {args.duration:.3f}'); print(f'SCORE {avg:.3f}'); print(f'STD {std:.3f}'); print(f'RUNS {len(vals)}')
+                display_result(be, 'mono', 1, args.duration, avg, std, len(vals))
                 aggregate['torch_mono_avg'] = avg
                 aggregate['torch_mono_std'] = std
                 printed += 1
@@ -116,7 +163,7 @@ def main():
                     if args.verbose:
                         print(f"[torch multi] run {i+1}/{args.repeats}: {s:.3f}")
                 avg, std = calc_stats(vals)
-                print(f'THREADS {threads_count}'); print(f'DURATION {args.duration:.3f}'); print(f'SCORE {avg:.3f}'); print(f'STD {std:.3f}'); print(f'RUNS {len(vals)}')
+                display_result(be, 'multi', threads_count, args.duration, avg, std, len(vals))
                 aggregate['torch_multi_avg'] = avg
                 aggregate['torch_multi_std'] = std
                 aggregate['torch_multi_gpus'] = threads_count
@@ -131,7 +178,7 @@ def main():
                     if args.verbose:
                         print(f"[cupy mono] run {i+1}/{args.repeats}: {s1:.3f}")
                 avg, std = calc_stats(vals)
-                print('THREADS 1'); print(f'DURATION {args.duration:.3f}'); print(f'SCORE {avg:.3f}'); print(f'STD {std:.3f}'); print(f'RUNS {len(vals)}')
+                display_result(be, 'mono', 1, args.duration, avg, std, len(vals))
                 aggregate['cupy_mono_avg'] = avg
                 aggregate['cupy_mono_std'] = std
                 printed += 1
@@ -149,7 +196,7 @@ def main():
                     if args.verbose:
                         print(f"[cupy multi] run {i+1}/{args.repeats}: {s:.3f}")
                 avg, std = calc_stats(vals)
-                print(f'THREADS {threads_count}'); print(f'DURATION {args.duration:.3f}'); print(f'SCORE {avg:.3f}'); print(f'STD {std:.3f}'); print(f'RUNS {len(vals)}')
+                display_result(be, 'multi', threads_count, args.duration, avg, std, len(vals))
                 aggregate['cupy_multi_avg'] = avg
                 aggregate['cupy_multi_std'] = std
                 aggregate['cupy_multi_gpus'] = threads_count
@@ -164,7 +211,7 @@ def main():
                     if args.verbose:
                         print(f"[numba mono] run {i+1}/{args.repeats}: {s1:.3f}")
                 avg, std = calc_stats(vals)
-                print('THREADS 1'); print(f'DURATION {args.duration:.3f}'); print(f'SCORE {avg:.3f}'); print(f'STD {std:.3f}'); print(f'RUNS {len(vals)}')
+                display_result(be, 'mono', 1, args.duration, avg, std, len(vals))
                 aggregate['numba_mono_avg'] = avg
                 aggregate['numba_mono_std'] = std
                 printed += 1
@@ -184,7 +231,7 @@ def main():
                     if args.verbose:
                         print(f"[numba multi] run {i+1}/{args.repeats}: {s:.3f}")
                 avg, std = calc_stats(vals)
-                print(f'THREADS {threads_count}'); print(f'DURATION {args.duration:.3f}'); print(f'SCORE {avg:.3f}'); print(f'STD {std:.3f}'); print(f'RUNS {len(vals)}')
+                display_result(be, 'multi', threads_count, args.duration, avg, std, len(vals))
                 aggregate['numba_multi_avg'] = avg
                 aggregate['numba_multi_std'] = std
                 aggregate['numba_multi_gpus'] = threads_count
@@ -199,7 +246,7 @@ def main():
                     if args.verbose:
                         print(f"[opencl mono] run {i+1}/{args.repeats}: {s1:.3f}")
                 avg, std = calc_stats(vals)
-                print('THREADS 1'); print(f'DURATION {args.duration:.3f}'); print(f'SCORE {avg:.3f}'); print(f'STD {std:.3f}'); print(f'RUNS {len(vals)}')
+                display_result(be, 'mono', 1, args.duration, avg, std, len(vals))
                 aggregate['opencl_mono_avg'] = avg
                 aggregate['opencl_mono_std'] = std
                 printed += 1
@@ -219,7 +266,7 @@ def main():
                     if args.verbose:
                         print(f"[opencl multi] run {i+1}/{args.repeats}: {s:.3f}")
                 avg, std = calc_stats(vals)
-                print(f'THREADS {threads_count}'); print(f'DURATION {args.duration:.3f}'); print(f'SCORE {avg:.3f}'); print(f'STD {std:.3f}'); print(f'RUNS {len(vals)}')
+                display_result(be, 'multi', threads_count, args.duration, avg, std, len(vals))
                 aggregate['opencl_multi_avg'] = avg
                 aggregate['opencl_multi_std'] = std
                 aggregate['opencl_multi_gpus'] = threads_count
