@@ -54,3 +54,7 @@ htmlcov/
 
 # Jupyter
 .ipynb_checkpoints/
+
+# Sorted data files
+notebooks/figures/
+notebooks/mlruns/
