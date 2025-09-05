@@ -17,30 +17,51 @@ LIMIT_NODES=${LIMIT_NODES:-}
 check_deps submit
 
 # Fonction issue de src/list_free_gpu.sh: liste les nœuds avec GPU tous libres
-list_free_gpu_nodes() {
-  # On boucle sur tous les nœuds connus de Slurm
+get_busy_gpu_nodes() {
+  # Liste les hôtes qui ont au moins un GPU alloué par des jobs RUNNING
+  squeue -h -o "%R %.b" --states=RUNNING \
+    | awk '$2 ~ /gpu/' \
+    | cut -d' ' -f1 \
+    | while read -r nodes; do scontrol show hostnames "$nodes"; done \
+    | sort -u
+}
+
+BUSY_GPU_NODES=$(get_busy_gpu_nodes || true)
+is_busy_node() { grep -qxF "$1" <<<"$BUSY_GPU_NODES"; }
+
+# Dresse la liste des nœuds avec GPU et leur quantité (une seule fois)
+nodes_with_gpu_counts() {
   for node in $(sinfo -h -N -o "%N"); do
-    # Vérifie si le nœud a des GPU configurés
-    if scontrol show node "$node" | grep -q "Gres=gpu"; then
-      # Récupère nombre total et nombre utilisés
-      total=$(scontrol show node "$node" | awk -F= '/CfgTRES/{print $2}' | grep -o "gres/gpu=[0-9]*" | cut -d= -f2)
-      used=$(scontrol show node "$node" | awk -F= '/AllocTRES/{print $2}' | grep -o "gres/gpu=[0-9]*" | cut -d= -f2)
-      # Si aucun GPU n'est utilisé et qu'il y en a au moins 1 → on affiche le nœud
-      if [[ -n "$total" && "$total" -gt 0 && ( -z "$used" || "$used" -eq 0 ) ]]; then
-        echo "$node"
-      fi
+    line=$(scontrol show node -o "$node" 2>/dev/null || true)
+    gres=$(sed -n 's/.*Gres=\([^ ]*\).*/\1/p' <<<"$line")
+    total=0
+    if [[ -n "$gres" && "$gres" != "(null)" ]]; then
+      total=$(tr ',' '\n' <<<"$gres" | awk -F: '
+        $1=="gpu" { n=$NF; gsub(/[^0-9].*/, "", n); s+=n }
+        END{print s+0}
+      ')
+    fi
+    if [[ "$total" -gt 0 ]]; then
+      echo "$node $total"
     fi
   done
 }
 
-# Détecter les nœuds avec tous les GPU libres
-mapfile -t GPU_NODES < <(list_free_gpu_nodes)
+# Construire la table "nœud -> nombre de GPU" une fois
+declare -A GPU_COUNT
+GPU_NODES=()
+while read -r _n _c; do
+  GPU_COUNT["$_n"]="$_c"
+  GPU_NODES+=("$_n")
+done < <(nodes_with_gpu_counts)
+
 if (( BENCH_VERBOSE == 1 )); then
-  echo "[submit-gpu] Nœuds GPU libres: ${GPU_NODES[*]:-none}"
+  echo "[submit-gpu] Nœuds avec GPU détectés: ${GPU_NODES[*]:-none}"
+  for n in "${GPU_NODES[@]}"; do echo "  - $n: ${GPU_COUNT[$n]}"; done
 fi
 
 if [[ ${#GPU_NODES[@]} -eq 0 ]]; then
-  echo "Aucun nœud GPU libre trouvé." >&2
+  echo "Aucun nœud avec GPU détecté." >&2
   exit 1
 fi
 
@@ -78,17 +99,16 @@ wall_s=$(estimate_walltime)
 wall=$(fmt_hms "$wall_s")
 echo "[submit-gpu] Walltime estimé: $wall (sec=$wall_s)"
 
+BUSY_GPU_NODES=$(get_busy_gpu_nodes || true)
 for NODE in "${GPU_NODES[@]}"; do
-  # Vérifier encore dispo/idle
-  if scontrol show node "$NODE" | grep -q "Gres=gpu"; then
-    echo "[submit-gpu] Soumission sur $NODE"
-    # Nombre total de GPU sur ce nœud
-    TOTAL_GPU=$(scontrol show node "$NODE" | awk -F= '/CfgTRES/{print $2}' | grep -o 'gres/gpu=[0-9]*' | cut -d= -f2)
-    if [[ -z "$TOTAL_GPU" || "$TOTAL_GPU" -lt 1 ]]; then
-      echo "[submit-gpu] Impossible de déterminer le nombre de GPU sur $NODE, on passe." >&2
-      continue
-    fi
-    sb_cmd=( sbatch
+  # Vérifier au dernier moment si le nœud a des GPU occupés
+  if is_busy_node "$NODE"; then
+    (( BENCH_VERBOSE == 1 )) && echo "[submit-gpu] $NODE occupé (GPU en usage) — on saute."
+    continue
+  fi
+  TOTAL_GPU=${GPU_COUNT[$NODE]:-0}
+  echo "[submit-gpu] Soumission sur $NODE (GPU=$TOTAL_GPU)"
+  sb_cmd=( sbatch
       --job-name "$JOB_NAME"
       --nodelist "$NODE"
       --nodes 1
@@ -108,9 +128,6 @@ for NODE in "${GPU_NODES[@]}"; do
       echo
     fi
     "${sb_cmd[@]}"
-  else
-    echo "[submit-gpu] $NODE n'est plus disponible, on saute."
-  fi
 done
 
 echo "[submit-gpu] Soumissions terminées."
