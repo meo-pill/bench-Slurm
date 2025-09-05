@@ -13,7 +13,7 @@ BENCH_VERBOSE=${BENCH_VERBOSE:-0}
 INCLUDE_NODES=${INCLUDE_NODES:-}
 EXCLUDE_NODES=${EXCLUDE_NODES:-}
 LIMIT_NODES=${LIMIT_NODES:-}
-GPU_WALLTIME_FACTOR=${GPU_WALLTIME_FACTOR:-10.0}  # facteur multiplicatif pour walltime GPU
+GPU_WALLTIME_FACTOR=${GPU_WALLTIME_FACTOR:-10}  # facteur multiplicatif pour walltime GPU
 
 check_deps submit
 
