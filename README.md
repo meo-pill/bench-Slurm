@@ -184,7 +184,7 @@ où `<backend>` ∈ {torch, cupy, numba, opencl} selon disponibilité.
 ## Détails techniques
 
 - Jobs CPU: `--exclusive`, `--ntasks-per-node=1`, `--cpus-per-task=<CPU du nœud>`.
-- Jobs GPU: `--exclusive`, `--ntasks-per-node=1`, `--gres=gpu:1` (modifiez selon vos besoins).
+- Jobs GPU: `--ntasks-per-node=1`, `--cpus-per-task=8`, `--mem=20G`, `--gres=gpu:<tous_les_GPU_du_nœud>` (détection automatique du total via Slurm; pas d'`--exclusive`).
 - Le binaire `cpu_bench` utilise OpenMP et s’adapte à `OMP_NUM_THREADS`.
 - Un verrou léger par nœud empêche l’exécution concurrente sur le même nœud (si FS partagé).
 - Tri du « top » stable et locale fixée (LC_ALL=C) pour des classements reproductibles.

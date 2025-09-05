@@ -82,14 +82,20 @@ for NODE in "${GPU_NODES[@]}"; do
   # Vérifier encore dispo/idle
   if scontrol show node "$NODE" | grep -q "Gres=gpu"; then
     echo "[submit-gpu] Soumission sur $NODE"
+    # Nombre total de GPU sur ce nœud
+    TOTAL_GPU=$(scontrol show node "$NODE" | awk -F= '/CfgTRES/{print $2}' | grep -o 'gres/gpu=[0-9]*' | cut -d= -f2)
+    if [[ -z "$TOTAL_GPU" || "$TOTAL_GPU" -lt 1 ]]; then
+      echo "[submit-gpu] Impossible de déterminer le nombre de GPU sur $NODE, on passe." >&2
+      continue
+    fi
     sb_cmd=( sbatch
       --job-name "$JOB_NAME"
       --nodelist "$NODE"
       --nodes 1
       --ntasks-per-node 1
-      --gres=gpu:1
-      --exclusive
-      --mem=0
+      --cpus-per-task 8
+      --gres=gpu:"$TOTAL_GPU"
+      --mem=20G
       --time "$wall"
       --output "$OUT_DIR/bench_%N.out"
       --error "$OUT_DIR/bench_%N.err"
