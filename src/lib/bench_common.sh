@@ -3,7 +3,8 @@
 set -euo pipefail
 
 # Déduit la racine du projet (dossier au-dessus de src/)
-ROOT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
+# Ce fichier est dans src/lib/, donc on remonte de deux niveaux.
+ROOT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)
 BIN_DIR="$ROOT_DIR/bin"
 RES_DIR="$ROOT_DIR/results"
 OUT_DIR="$ROOT_DIR/outputs"
@@ -28,7 +29,7 @@ check_deps() {
       fi
       ;;
     submit)
-      for c in sinfo sbatch; do command -v "$c" >/dev/null 2>&1 || missing+=("$c"); done
+      for c in sinfo squeue scontrol sbatch; do command -v "$c" >/dev/null 2>&1 || missing+=("$c"); done
       ;;
     status)
       command -v squeue >/dev/null 2>&1 || missing+=("squeue")
