@@ -20,8 +20,56 @@ BENCH_VERBOSE=${BENCH_VERBOSE:-0}      # si 1, verbosité accrue
 LC_ALL=C; export LC_ALL
 
 usage() {
-    echo "Usage: $0 [--repeats N|-r N] [--duration S|-d S] [--include a,b] [--exclude x,y] [--limit N] [--only-new] [--verbose] [--unique|--unique-last|--top10|--by-node-mean] {build|submit|submit_cpu|submit_gpu|top|status|list}"
-    echo "Notes: submit est un routeur auto qui lance d'abord submit_gpu puis submit_cpu. Utilisez submit_gpu ou submit_cpu pour forcer."
+        cat <<'EOF'
+Bench Slurm CPU/GPU
+--------------------
+Syntaxe générale:
+    ./main.sh <commande> [options]
+
+Commandes disponibles:
+    build         Compile le binaire CPU et prépare l'env (optionnel)
+    submit        Soumet d'abord des jobs GPU puis CPU (routeur auto)
+    submit_cpu    Soumet uniquement des jobs CPU
+    submit_gpu    Soumet uniquement des jobs GPU
+    top           Affiche les classements CPU/GPU
+    status        Affiche l'état des jobs et un résumé des résultats
+    list          Liste des nœuds et nombre de runs
+    help|-h|--help Cette aide
+
+Flags globaux (affectent submit/submit_cpu/submit_gpu):
+    -r, --repeats N        Répétitions par mode (défaut: 3)
+    -d, --duration S       Durée (s) cible d'une répétition (défaut: 2.0)
+    --include n1,n2        Restreindre aux nœuds listés
+    --exclude nX,nY        Exclure ces nœuds
+    --limit N              Limiter le nombre total de nœuds ciblés
+    --only-new             Ne lancer que sur nœuds sans résultats (CSV absent)
+    --verbose              Sortie verbeuse (soumissions, détails GPU)
+
+Flags spécifiques GPU (submit / submit_gpu uniquement):
+    --vram-frac F          Fraction VRAM cible pour ajuster la taille des buffers (0.05..0.95, défaut 0.80)
+
+Flags spécifiques top:
+    --unique                (défaut) Meilleur run par nœud
+    --unique-last           Dernier run par nœud
+    --top10                 Top 10 tous runs confondus
+    --by-node-mean          Moyenne (± écart-type) agrégée par nœud
+
+Comportement de 'submit':
+    1. Tente submit_gpu (ignorer si aucun GPU ou échec bénin)
+    2. Puis submit_cpu
+    Le retour est en erreur seulement si les deux échouent.
+
+Exemples:
+    # Soumettre auto (GPU puis CPU) sur 5 nœuds max avec 5 répétitions de 3s
+    ./main.sh --repeats 5 --duration 3 --limit 5 submit
+
+    # Forcer GPU uniquement avec 70% VRAM cible
+    ./main.sh submit_gpu --vram-frac 0.70
+
+    # Classement top10
+    ./main.sh --top10 top
+
+EOF
 }
 
 # Parse CLI flags et commande
@@ -44,6 +92,8 @@ while [[ $# -gt 0 ]]; do
             ONLY_NEW=1; shift ;;
         --verbose)
             BENCH_VERBOSE=1; shift ;;
+        --vram-frac)
+            BENCH_VRAM_FRAC="${2:?valeur manquante pour --vram-frac}"; shift 2 ;;
         --unique)
             TOP_MODE="unique"; shift ;;
         --unique-last)
@@ -52,7 +102,7 @@ while [[ $# -gt 0 ]]; do
             TOP_MODE="top10"; shift ;;
         --by-node-mean)
             TOP_MODE="by-node-mean"; shift ;;
-        -h|--help)
+        -h|--help|help)
             usage; exit 0 ;;
         --)
             shift; break ;;
@@ -63,17 +113,17 @@ done
 [[ -z "${cmd:-}" ]] && cmd="submit"
 
 # Export des variables pour les sous-scripts
-export BENCH_DURATION BENCH_REPEATS TOP_MODE INCLUDE_NODES EXCLUDE_NODES LIMIT_NODES ONLY_NEW BENCH_VERBOSE
+export BENCH_DURATION BENCH_REPEATS TOP_MODE INCLUDE_NODES EXCLUDE_NODES LIMIT_NODES ONLY_NEW BENCH_VERBOSE BENCH_VRAM_FRAC
 
 case "$cmd" in
     build)
         bash "$CMD_DIR/build.sh" ;;
-        submit)
+    submit)
         bash "$CMD_DIR/submit.sh" ;;
-        submit_cpu)
-            bash "$CMD_DIR/submit_cpu.sh" ;;
-        submit_gpu)
-            bash "$CMD_DIR/submit_gpu.sh" ;;
+    submit_cpu)
+        bash "$CMD_DIR/submit_cpu.sh" ;;
+    submit_gpu)
+        bash "$CMD_DIR/submit_gpu.sh" ;;
     top)
         bash "$CMD_DIR/top.sh" ;;
     status)
@@ -83,4 +133,4 @@ case "$cmd" in
     *)
         usage; exit 1 ;;
 esac
-
+exit 0

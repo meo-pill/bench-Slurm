@@ -30,7 +30,7 @@ Fichiers principaux:
 - Slurm: `sinfo`, `sbatch`, `squeue`
 - Build: `make`, `gcc` ou `clang` avec support OpenMP, `libm`
 - Outils shell: `awk`, `sort`, `nl`, `tr`
-- GPU (obligatoire): un environnement Conda actif (voir ci-dessous) contenant Python 3.x et au moins un backend parmi `torch`, `cupy`, `numba`, `pyopencl`.
+- GPU (obligatoire): un environnement Conda actif (voir ci-dessous) contenant Python 3.x et au moins un backend parmi `torch`, `cupy`, `numba`.
 
 ## Compilation
 
@@ -40,7 +40,7 @@ Fichiers principaux:
 
 Le binaire est produit dans `bin/cpu_bench`.
 
-Si Conda est disponible, `build` prépare aussi un environnement `bench` et y installe des dépendances de base (numpy, numba, pyopencl). Cet environnement (ou un autre équivalent) est requis pour le bench GPU. Activez-le avant exécution côté nœud ou laissez le job GPU l’activer.
+Si Conda est disponible, `build` prépare aussi un environnement `bench` et y installe des dépendances de base (numpy, numba). Cet environnement (ou un autre équivalent) est requis pour le bench GPU. Activez-le avant exécution côté nœud ou laissez le job GPU l’activer.
 
 ## Utilisation rapide
 
@@ -91,7 +91,11 @@ Si Conda est disponible, `build` prépare aussi un environnement `bench` et y in
 Remarques GPU:
 
 - Le runner GPU écrit une seule ligne par exécution dans `results/gpu_<node>.csv`.
-- Le « top » inclut des sections GPU qui agrègent par moyenne des backends disponibles (torch/cupy/numba/opencl), en mono et multi.
+- Le « top » inclut des sections GPU qui agrègent par moyenne des backends disponibles (torch/cupy/numba), en mono et multi.
+
+### Note: support OpenCL retiré
+
+Le support OpenCL (pyopencl) a été retiré. Motif: les clusters ciblés exposent déjà CUDA (pilotes + runtime NVIDIA) mais n'intègrent généralement pas les composants supplémentaires nécessaires à OpenCL (ICD loader, bibliothèques fournisseur / paquets spécifiques). Ajouter et maintenir ces couches demanderait une configuration hors standard côté administrateurs sans bénéfice direct pour le bench (les mêmes GPU sont déjà couverts via CUDA avec torch/cupy/numba). Pour réduire la complexité (dépendances, temps d'installation, chemins variables) et éviter des cas de panne silencieuse, OpenCL a donc été désactivé. Les anciennes colonnes OpenCL éventuellement présentes dans des CSV ou notebooks historiques peuvent être ignorées; elles ne seront plus générées.
 
 Conda (obligatoire pour GPU):
 
@@ -187,7 +191,7 @@ Résultats GPU (`results/gpu_<node>.csv`) — une ligne par exécution avec l’
 node,runs,duration_s,timestamp,(<backend>_mono_avg,<backend>_mono_std,<backend>_multi_avg,<backend>_multi_std,<backend>_multi_gpus)*
 ```
 
-où `<backend>` ∈ {torch, cupy, numba, opencl} selon disponibilité.
+où `<backend>` ∈ {torch, cupy, numba} selon disponibilité.
 
 ## Exemples complets (tous paramètres)
 
@@ -249,7 +253,7 @@ Exemples « top » avec les différents modes disponibles:
 
 Remarques GPU:
 
-- Le bench GPU Python détecte dynamiquement les backends disponibles (torch, cupy, numba, pyopencl).
+- Le bench GPU Python détecte dynamiquement les backends disponibles (torch, cupy, numba). (OpenCL a été retiré; voir la note ci-dessus.)
 - Structure séparée: `gpu_bench_core.py` (fonctions de bench) et `gpu_bench.py` (runner + CSV).
 - Le job GPU tente d’activer l’environnement Conda `BENCH_CONDA_ENV` (défaut `bench`). Si l’environnement n’est pas actif après cette étape, l’exécution échoue (pas de repli sur `python3`).
 - Le runner `gpu_bench.py` peut valider le nom via `--conda-env <name>` et refusera de s’exécuter sans env Conda actif.

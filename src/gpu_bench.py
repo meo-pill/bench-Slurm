@@ -17,9 +17,9 @@ from datetime import datetime
 import math
 
 from gpu_bench_core import (
-    bench_torch, bench_cupy, bench_numba, bench_opencl,
-    list_devices_torch, list_devices_cupy, list_devices_numba, list_devices_opencl,
-    bench_torch_multi, bench_cupy_multi,
+    bench_torch, bench_cupy, bench_numba,
+    list_devices_torch, list_devices_cupy, list_devices_numba,
+    bench_torch_multi, bench_cupy_multi, set_vram_target,
 )
 
 
@@ -76,12 +76,19 @@ def main():
     # outputs sous la racine du projet (parent de src)
     p.add_argument('--csv-dir', type=str, default=os.path.join(os.path.dirname(os.path.dirname(__file__)), 'outputs'), help='répertoire pour stocker le CSV consolidé')
     p.add_argument('--node', type=str, default=socket.gethostname().split('.')[0], help='nom du nœud pour les CSV')
+    p.add_argument('--vram-frac', type=float, default=None, help='fraction VRAM cible (0.05-0.95) pour ajuster la taille des buffers GPU')
     args = p.parse_args()
 
     # Vérifie conda actif et (optionnellement) le nom d'env requis
     ensure_conda_active(args.conda_env)
 
-    backends = ['torch','cupy','numba','opencl']
+    backends = ['torch','cupy','numba']
+
+    # Override VRAM target if requested
+    if args.vram_frac is not None:
+        set_vram_target(args.vram_frac)
+        if args.verbose:
+            print(f"[cfg] VRAM target fraction override: {args.vram_frac:.3f}")
 
     # Prépare CSV dir
     csv_dir = args.csv_dir
@@ -89,17 +96,30 @@ def main():
 
     def write_csv_row(results):
         """Écrit une seule ligne récapitulative dans gpu_<node>.csv.
-        Colonnes: node,runs,duration_s,timestamp,(<be>_mono_avg,<be>_mono_std,<be>_multi_avg,<be>_multi_std,<be>_multi_gpus)*
+
+        Nouveau schéma colonnes par backend (mono puis multi):
+          <be>_mono_avg,<be>_mono_std,<be>_mono_vram_total_MB,<be>_mono_vram_used_MB,<be>_mono_vram_used_pct,
+          <be>_multi_avg,<be>_multi_std,<be>_multi_gpus,<be>_multi_vram_total_MB_sum,<be>_multi_vram_used_MB_sum,<be>_multi_vram_used_pct
+
+        Si un ancien fichier existe (en-tête différent) il est renommé *.bak puis recréé.
         """
         path = os.path.join(csv_dir, f"gpu_{args.node}.csv")
         be_cols = []
         for be in backends:
             be_cols += [
-                f"{be}_mono_avg", f"{be}_mono_std",
-                f"{be}_multi_avg", f"{be}_multi_std", f"{be}_multi_gpus"
+                f"{be}_mono_avg", f"{be}_mono_std", f"{be}_mono_vram_total_MB", f"{be}_mono_vram_used_MB", f"{be}_mono_vram_used_pct",
+                f"{be}_multi_avg", f"{be}_multi_std", f"{be}_multi_gpus", f"{be}_multi_vram_total_MB_sum", f"{be}_multi_vram_used_MB_sum", f"{be}_multi_vram_used_pct"
             ]
         header = 'node,runs,duration_s,timestamp,' + ','.join(be_cols) + '\n'
-        if not os.path.exists(path):
+        if os.path.exists(path):
+            try:
+                with open(path, 'r') as f:
+                    first = f.readline()
+                if first != header:
+                    os.replace(path, path + '.bak')
+            except Exception:
+                pass
+        if (not os.path.exists(path)) or (os.path.getsize(path) == 0):
             with open(path, 'w') as f:
                 f.write(header)
         ts = datetime.now().isoformat(timespec='seconds')
@@ -148,6 +168,12 @@ def main():
                 display_result(be, 'mono', 1, args.duration, avg, std, len(vals))
                 aggregate['torch_mono_avg'] = avg
                 aggregate['torch_mono_std'] = std
+                # VRAM mono torch
+                vinfo = getattr(bench_torch, 'last_vram', None)
+                if vinfo:
+                    aggregate['torch_mono_vram_total_MB'] = vinfo['total_bytes']/1e6
+                    aggregate['torch_mono_vram_used_MB'] = vinfo['used_bytes']/1e6
+                    aggregate['torch_mono_vram_used_pct'] = (vinfo['used_bytes']/vinfo['total_bytes']*100.0) if vinfo['total_bytes'] else 0.0
                 printed += 1
                 any_ok = True
                 # Multi-GPU
@@ -167,6 +193,22 @@ def main():
                 aggregate['torch_multi_avg'] = avg
                 aggregate['torch_multi_std'] = std
                 aggregate['torch_multi_gpus'] = threads_count
+                # VRAM multi torch
+                if threads_count > 1:
+                    vinfo_m = getattr(bench_torch_multi, 'last_vram', None)
+                    if vinfo_m:
+                        total_sum = vinfo_m.get('total_bytes_sum') or 0
+                        used_sum = vinfo_m.get('used_bytes_sum') or 0
+                        aggregate['torch_multi_vram_total_MB_sum'] = total_sum/1e6
+                        aggregate['torch_multi_vram_used_MB_sum'] = used_sum/1e6
+                        aggregate['torch_multi_vram_used_pct'] = (used_sum/total_sum*100.0) if total_sum else 0.0
+                else:
+                    # fallback répète mono
+                    vinfo = getattr(bench_torch, 'last_vram', None)
+                    if vinfo:
+                        aggregate['torch_multi_vram_total_MB_sum'] = vinfo['total_bytes']/1e6
+                        aggregate['torch_multi_vram_used_MB_sum'] = vinfo['used_bytes']/1e6
+                        aggregate['torch_multi_vram_used_pct'] = (vinfo['used_bytes']/vinfo['total_bytes']*100.0) if vinfo['total_bytes'] else 0.0
                 printed += 1
                 any_ok = True
             elif be == 'cupy':
@@ -181,6 +223,11 @@ def main():
                 display_result(be, 'mono', 1, args.duration, avg, std, len(vals))
                 aggregate['cupy_mono_avg'] = avg
                 aggregate['cupy_mono_std'] = std
+                vinfo = getattr(bench_cupy, 'last_vram', None)
+                if vinfo:
+                    aggregate['cupy_mono_vram_total_MB'] = vinfo['total_bytes']/1e6
+                    aggregate['cupy_mono_vram_used_MB'] = vinfo['used_bytes']/1e6
+                    aggregate['cupy_mono_vram_used_pct'] = (vinfo['used_bytes']/vinfo['total_bytes']*100.0) if vinfo['total_bytes'] else 0.0
                 printed += 1
                 any_ok = True
                 # Multi-GPU
@@ -200,6 +247,20 @@ def main():
                 aggregate['cupy_multi_avg'] = avg
                 aggregate['cupy_multi_std'] = std
                 aggregate['cupy_multi_gpus'] = threads_count
+                if threads_count > 1:
+                    vinfo_m = getattr(bench_cupy_multi, 'last_vram', None)
+                    if vinfo_m:
+                        total_sum = vinfo_m.get('total_bytes_sum') or 0
+                        used_sum = vinfo_m.get('used_bytes_sum') or 0
+                        aggregate['cupy_multi_vram_total_MB_sum'] = total_sum/1e6
+                        aggregate['cupy_multi_vram_used_MB_sum'] = used_sum/1e6
+                        aggregate['cupy_multi_vram_used_pct'] = (used_sum/total_sum*100.0) if total_sum else 0.0
+                else:
+                    vinfo = getattr(bench_cupy, 'last_vram', None)
+                    if vinfo:
+                        aggregate['cupy_multi_vram_total_MB_sum'] = vinfo['total_bytes']/1e6
+                        aggregate['cupy_multi_vram_used_MB_sum'] = vinfo['used_bytes']/1e6
+                        aggregate['cupy_multi_vram_used_pct'] = (vinfo['used_bytes']/vinfo['total_bytes']*100.0) if vinfo['total_bytes'] else 0.0
                 printed += 1
                 any_ok = True
             elif be == 'numba':
@@ -214,6 +275,11 @@ def main():
                 display_result(be, 'mono', 1, args.duration, avg, std, len(vals))
                 aggregate['numba_mono_avg'] = avg
                 aggregate['numba_mono_std'] = std
+                vinfo = getattr(bench_numba, 'last_vram', None)
+                if vinfo:
+                    aggregate['numba_mono_vram_total_MB'] = vinfo['total_bytes']/1e6
+                    aggregate['numba_mono_vram_used_MB'] = vinfo['used_bytes']/1e6
+                    aggregate['numba_mono_vram_used_pct'] = (vinfo['used_bytes']/vinfo['total_bytes']*100.0) if vinfo['total_bytes'] else 0.0
                 printed += 1
                 any_ok = True
                 # Multi-GPU (fallback séquentiel)
@@ -235,43 +301,20 @@ def main():
                 aggregate['numba_multi_avg'] = avg
                 aggregate['numba_multi_std'] = std
                 aggregate['numba_multi_gpus'] = threads_count
-                printed += 1
-                any_ok = True
-            elif be == 'opencl':
-                # Mono-GPU
-                vals = []
-                for i in range(args.repeats):
-                    s1 = bench_opencl(args.duration, 0, args.size, args.verbose)
-                    vals.append(s1)
-                    if args.verbose:
-                        print(f"[opencl mono] run {i+1}/{args.repeats}: {s1:.3f}")
-                avg, std = calc_stats(vals)
-                display_result(be, 'mono', 1, args.duration, avg, std, len(vals))
-                aggregate['opencl_mono_avg'] = avg
-                aggregate['opencl_mono_std'] = std
-                printed += 1
-                any_ok = True
-                # Multi-GPU (fallback séquentiel)
-                devs = list_devices_opencl()
-                threads_count = len(devs) if len(devs) > 1 else 1
-                vals = []
-                for i in range(args.repeats):
-                    if len(devs) > 1:
-                        s = 0.0
-                        for d in devs:
-                            s += bench_opencl(args.duration, d, args.size, args.verbose)
+                vinfo = getattr(bench_numba, 'last_vram', None)
+                if vinfo:
+                    if threads_count > 1:
+                        total_sum = vinfo['total_bytes'] * threads_count
+                        used_sum = vinfo['used_bytes'] * threads_count
                     else:
-                        s = bench_opencl(args.duration, 0, args.size, args.verbose)
-                    vals.append(s)
-                    if args.verbose:
-                        print(f"[opencl multi] run {i+1}/{args.repeats}: {s:.3f}")
-                avg, std = calc_stats(vals)
-                display_result(be, 'multi', threads_count, args.duration, avg, std, len(vals))
-                aggregate['opencl_multi_avg'] = avg
-                aggregate['opencl_multi_std'] = std
-                aggregate['opencl_multi_gpus'] = threads_count
+                        total_sum = vinfo['total_bytes']
+                        used_sum = vinfo['used_bytes']
+                    aggregate['numba_multi_vram_total_MB_sum'] = total_sum/1e6
+                    aggregate['numba_multi_vram_used_MB_sum'] = used_sum/1e6
+                    aggregate['numba_multi_vram_used_pct'] = (used_sum/total_sum*100.0) if total_sum else 0.0
                 printed += 1
                 any_ok = True
+            
             else:
                 raise RuntimeError('backend inconnu')
 
@@ -285,7 +328,7 @@ def main():
         write_csv_row(aggregate)
         return 0
     else:
-        print("Aucun backend GPU Python disponible (torch/cupy/numba/pyopencl)", file=sys.stderr)
+        print("Aucun backend GPU Python disponible (torch/cupy/numba)", file=sys.stderr)
         if last_err and args.verbose:
             print(f"Dernière erreur: {last_err}", file=sys.stderr)
         return 2

@@ -11,7 +11,7 @@ make -C "$ROOT_DIR/src" PREFIX="$ROOT_DIR" bench
 chmod +x "$JOB_SCRIPT"
 echo "[build] OK"
 
-# Optionnel: préparer un environnement Conda pour le bench GPU
+# préparer un environnement Conda pour le bench GPU
 setup_conda_env() {
 	echo "[build] Préparation de l'environnement Conda (optionnel)…"
 	# Tenter d'initialiser conda si la fonction/commande n'est pas déjà dispo
@@ -29,7 +29,7 @@ setup_conda_env() {
 
 	if ! command -v conda >/dev/null 2>&1; then
 		echo "[build] Conda introuvable. Étape Conda ignorée."
-		return 0
+		return 1
 	fi
 
 	# Créer l'env 'bench' si absent
@@ -37,9 +37,9 @@ setup_conda_env() {
 		echo "[build] Env Conda 'bench' déjà présent."
 	else
 		echo "[build] Création de l'env Conda 'bench'…"
-		conda create -y -n bench python=3.10 pip numpy numba pyopencl || {
+		conda create -y -n bench python=3.10 pip numpy numba || {
 			echo "[build] Échec création env 'bench' (Conda). Étape Conda ignorée." >&2
-			return 0
+			return 1
 		}
 	fi
 
@@ -53,7 +53,7 @@ setup_conda_env() {
 	fi
 
 	# Option: installation de bibliothèques supplémentaires GPU (à la charge de l'utilisateur)
-	echo "[build] Dépendances installées: numpy, numba, pyopencl."
+	echo "[build] Dépendances installées: numpy, numba."
 	echo "[build] Pour PyTorch/CuPy, installez selon votre CUDA (exemples):"
 	echo "        conda install -n bench -y -c pytorch pytorch pytorch-cuda=12.1 -c nvidia"
 	echo "        pip install cupy-cuda12x  # ou cupy-cuda11x selon votre stack"

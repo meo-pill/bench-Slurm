@@ -62,7 +62,7 @@ VERBOSE=${BENCH_VERBOSE:-0}
 
 mkdir -p "$OUT_DIR" "$RES_DIR"
 
-# Vérifie python3 et qu'au moins un backend GPU est disponible (torch/cupy/numba/pyopencl)
+# Vérifie python3 et qu'au moins un backend GPU est disponible (torch/cupy/numba)
 check_deps() {
   local missing=()
   command -v "$PY" >/dev/null 2>&1 || missing+=("python")
@@ -99,25 +99,10 @@ try:
     pass
 except Exception:
   pass
-try:
-  import pyopencl as cl
-  has_gpu = False
-  try:
-    for p in cl.get_platforms():
-      devs = p.get_devices(device_type=cl.device_type.GPU)
-      if devs:
-        has_gpu = True
-        break
-  except Exception:
-    has_gpu = False
-  if has_gpu:
-    ok = True
-except Exception:
-  pass
 sys.exit(0 if ok else 2)
 PY
   then
-  echo "Aucun backend GPU disponible (torch/cupy/numba/pyopencl) sur ce nœud." >&2
+  echo "Aucun backend GPU disponible (torch/cupy/numba) sur ce nœud." >&2
   exit 0
   fi
 }
