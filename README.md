@@ -1,13 +1,21 @@
-# Bench CPU/GPU Slurm (mono et multi-thread)
+# Bench CPU/GPU Slurm (mono & multi)
 
-Outil de bench CPU/GPU orchestré par Slurm: compilation d’un binaire CPU OpenMP, soumission de jobs exclusifs par nœud, stockage des résultats en CSV, et commandes pour classer les nœuds.
+Outil de benchmark CPU & GPU orchestré par Slurm :
+
+- Compilation d’un binaire CPU OpenMP (portable + binaire natif par hôte si possible)
+- Soumission de jobs CPU (non exclusifs, allouant **tous les CPU du nœud** via `CPUTot`)
+- Soumission de jobs GPU (tous les GPU du nœud, VRAM adaptative)
+- Résultats persistés en CSV (historique cumulatif)
+- Classements (« top ») multi‑critères CPU et GPU
+- Ajustement dynamique de la taille des buffers GPU selon la VRAM disponible
 
 ## Aperçu
 
-- Un job Slurm par nœud idle, en mode exclusif (utilise tous les CPU du nœud).
-- Deux mesures par nœud: monothread et multithread (tous les cœurs alloués).
-- Chaque mesure est répétée N fois; on calcule moyenne et écart-type.
-- Résultats au format CSV par nœud, et « top » pour classer les machines.
+- CPU : un job par nœud ciblé (tous les nœuds vus par `sinfo -N` après filtres). Pas de `--exclusive`; on alloue `--cpus-per-task` au nombre de CPU **libres** (CPUTot - CPUAlloc) au moment de la soumission.
+- GPU : un job par nœud détecté avec GPUs (via `scontrol show node` / Gres). Alloue tous les GPU (`--gres=gpu:<total>`) et 8 CPU.
+- Deux modes par backend : monothread (1 thread / 1 GPU) et multi (tous les threads / tous les GPU disponibles ; fallback mono si un seul GPU).
+- Chaque mode est répété N fois → moyenne + écart-type.
+- Résultats CSV cumulés (jamais écrasés). Classements CPU/GPU par meilleur run, dernier run, top global ou moyenne historique.
 
 Répertoires:
 
@@ -15,22 +23,26 @@ Répertoires:
 - `results/` — fichiers CSV CPU/GPU (`cpu_<node>.csv`, `gpu_<node>.csv`)
 - `outputs/` — logs Slurm (`bench_<node>.out/.err`)
 
-Fichiers principaux:
+Fichiers principaux / scripts :
 
-- `main.sh` — routeur CLI (build, submit, submit_cpu, submit_gpu, top, status, list)
-- `src/cmd/*.sh` — sous-scripts appelés par `main.sh` (build/submit/top/status/list, et variantes CPU/GPU)
-- `src/bench_job_cpu.sh` — job Slurm CPU (exécute mono + multi)
-- `src/bench_job_gpu.sh` — job Slurm GPU (déclenche le bench GPU Python)
-- `src/cpu_bench.c` — micro-benchmark CPU (OpenMP)
-- `src/gpu_bench.py` — runner GPU (orchestration/CSV)
-- `src/gpu_bench_core.py` — fonctions cœur des benchmarks GPU
+- `main.sh` — routeur CLI (build | submit | submit_cpu | submit_gpu | top | status | list)
+- `src/cmd/*.sh` — commandes modulaires
+  - `build.sh` (compilation + préparation env Conda facultative)
+  - `submit.sh` (routeur auto GPU puis CPU) — NOTE : ne supporte pas `--cpu/--gpu` (utiliser `submit_cpu` / `submit_gpu`)
+  - `submit_cpu.sh` / `submit_gpu.sh`
+  - `top.sh`, `status.sh`, `list.sh`, `cleanup_err_empty.sh`
+- `src/bench_job_cpu.sh` — script sbatch CPU (mono + multi)
+- `src/bench_job_gpu.sh` — script sbatch GPU (mono + multi pour chaque backend)
+- `src/cpu_bench.c` — micro‑benchmark OpenMP (auto‑adapté à `OMP_NUM_THREADS`)
+- `src/gpu_bench.py` — orchestration + CSV GPU
+- `src/gpu_bench_core.py` — kernels / logique VRAM / multi‑GPU
 
 ## Prérequis
 
-- Slurm: `sinfo`, `sbatch`, `squeue`
-- Build: `make`, `gcc` ou `clang` avec support OpenMP, `libm`
-- Outils shell: `awk`, `sort`, `nl`, `tr`
-- GPU (obligatoire): un environnement Conda actif (voir ci-dessous) contenant Python 3.x et au moins un backend parmi `torch`, `cupy`, `numba`.
+- Slurm : `sinfo`, `sbatch`, `squeue`, `scontrol`
+- Build : `make`, `gcc` ou `clang` (+ OpenMP), `libm`
+- Shell : `awk`, `sort`, `nl`, `tr`
+- Python / GPU : environnement Conda **actif** avec Python 3.x et ≥1 backend parmi `torch`, `cupy`, `numba` (OpenCL retiré)
 
 ## Compilation
 
@@ -38,32 +50,31 @@ Fichiers principaux:
 ./main.sh build
 ```
 
-Le binaire est produit dans `bin/cpu_bench`.
+Produit :
 
-Si Conda est disponible, `build` prépare aussi un environnement `bench` et y installe des dépendances de base (numpy, numba). Cet environnement (ou un autre équivalent) est requis pour le bench GPU. Activez-le avant exécution côté nœud ou laissez le job GPU l’activer.
+- `bin/cpu_bench` (portable, `-march=x86-64`)
+- À l’exécution d’un job CPU, un binaire natif optimisé (`bin/bench-<hostname>`) peut être compilé à la volée (fallback sur le portable si échec).
+
+Conda : si disponible, `build` crée/actualise l’environnement `bench` (packages de base : `python`, `pip`, `numpy`, `numba`) et suggère l’installation de `pytorch` / `cupy` selon votre stack CUDA.
 
 ## Utilisation rapide
 
-- Soumettre en mode automatique (essaie GPU puis CPU), 3 répétitions × 2 s:
+- Soumettre en mode automatique (tente GPU puis CPU) :
 
 ```bash
 ./main.sh submit
 ```
 
-- Forcer CPU uniquement:
+- Forcer CPU uniquement :
 
 ```bash
 ./main.sh submit_cpu
-# ou
-./main.sh submit --cpu
 ```
 
-- Forcer GPU uniquement:
+- Forcer GPU uniquement :
 
 ```bash
 ./main.sh submit_gpu
-# ou
-./main.sh submit --gpu
 ```
 
 - Voir l’état des jobs et le nombre de fichiers résultats:
@@ -81,28 +92,27 @@ Si Conda est disponible, `build` prépare aussi un environnement `bench` et y in
 ## Commandes
 
 - `build` — compile le binaire
-- `submit` — routeur auto: lance d'abord `submit_gpu`, puis `submit_cpu` (échoue seulement si les deux échouent)
-- `submit_cpu` — soumet des jobs CPU sur les nœuds idle
-- `submit_gpu` — soumet des jobs GPU sur les nœuds avec GPU libres
+- `submit` — routeur auto : lance `submit_gpu` puis `submit_cpu` (échec global seulement si les deux échouent)
+- `submit_cpu` — jobs CPU sur *tous les nœuds visibles* (`sinfo -N`), allocation de tous les CPU déclarés (`CPUTot`) du nœud (non exclusif). Note: si d'autres jobs consomment déjà des cœurs, Slurm peut retarder/ajuster l'allocation.
+- `submit_gpu` — jobs GPU sur les nœuds disposant de GPU (alloue tous les GPU du nœud)
 - `top` — affiche les classements des nœuds
 - `status` — affiche les jobs en cours et une synthèse des résultats
 - `list` — liste tous les nœuds du cluster et le nombre de runs enregistrés
 
-Remarques GPU:
+Remarques GPU :
 
-- Le runner GPU écrit une seule ligne par exécution dans `results/gpu_<node>.csv`.
-- Le « top » inclut des sections GPU qui agrègent par moyenne des backends disponibles (torch/cupy/numba), en mono et multi.
+- Le runner écrit **une ligne** par exécution dans `results/gpu_<node>.csv` avec de nombreuses métriques (scores + utilisation VRAM par backend).
+- Le « top » agrège les backends disponibles en prenant la **moyenne** des colonnes `<backend>_mono_avg` / `<backend>_multi_avg` présentes.
 
 ### Note: support OpenCL retiré
 
 Le support OpenCL (pyopencl) a été retiré. Motif: les clusters ciblés exposent déjà CUDA (pilotes + runtime NVIDIA) mais n'intègrent généralement pas les composants supplémentaires nécessaires à OpenCL (ICD loader, bibliothèques fournisseur / paquets spécifiques). Ajouter et maintenir ces couches demanderait une configuration hors standard côté administrateurs sans bénéfice direct pour le bench (les mêmes GPU sont déjà couverts via CUDA avec torch/cupy/numba). Pour réduire la complexité (dépendances, temps d'installation, chemins variables) et éviter des cas de panne silencieuse, OpenCL a donc été désactivé. Les anciennes colonnes OpenCL éventuellement présentes dans des CSV ou notebooks historiques peuvent être ignorées; elles ne seront plus générées.
 
-Conda (obligatoire pour GPU):
+Conda (obligatoire GPU) :
 
-- Un environnement Conda actif est requis lors de l’exécution du runner GPU.
-- Si aucun environnement n’est actif, l’exécution échoue immédiatement (code de retour 3).
-- Le runner accepte l’option `--conda-env <name>` pour vérifier que le nom de l’environnement actif correspond.
-- Même si vous fournissez `BENCH_PYTHON`, un environnement Conda actif reste nécessaire.
+- Le script Python vérifie qu’un environnement Conda est actif (`CONDA_DEFAULT_ENV` / `CONDA_PREFIX`). Sinon : échec (rc=3).
+- Option manuelle : `gpu_bench.py --conda-env <nom>` pour forcer le nom attendu.
+- `bench_job_gpu.sh` tente d’activer `BENCH_CONDA_ENV` (défaut `bench`) si `BENCH_PYTHON` n’est pas défini.
 
 ## Options communes
 
@@ -111,17 +121,17 @@ Conda (obligatoire pour GPU):
 - `--include n1,n2` — ne garder que ces nœuds
 - `--exclude nX,nY` — exclure ces nœuds
 - `--limit N` — limiter au N premiers nœuds après filtres
-- `--only-new` — ne lancer que sur les nœuds sans résultats
+- `--only-new` — ne lancer que sur les nœuds sans résultats (CSV absent ou présent sans ligne de données)
 - `--verbose` — sortie plus détaillée (traces de soumission, commandes sbatch)
 
-Options de « top » (sélection d’un mode; défaut: `--unique`):
+Options de « top » (mutuellement exclusives, défaut `--unique`):
 
 - `--unique` — meilleur run par nœud
 - `--unique-last` — dernier run par nœud
 - `--top10` — top 10 de toutes les runs (sans agrégation par nœud)
 - `--by-node-mean` — moyenne (± écart-type) agrégée par nœud
 
-Exemples:
+Exemples :
 
 ```bash
 # Soumettre avec 5 répétitions de 3 s, seulement sur n1 et n2
@@ -140,38 +150,36 @@ Exemples:
 ./main.sh list
 ```
 
-## Sous-scripts et structure
+## Variables d’environnement principales
 
-Les commandes sont implémentées comme sous-scripts sous `src/cmd/` et partagent des utilitaires communs dans `src/lib/bench_common.sh`.
-
-- `src/cmd/build.sh` — build CPU et préparation du job script
-- `src/cmd/submit.sh` — routeur (auto|cpu|gpu)
-- `src/cmd/submit_cpu.sh` — soumission CPU
-- `src/cmd/submit_gpu.sh` — soumission GPU (détecte nœuds avec GPU libres)
-- `src/cmd/top.sh`, `src/cmd/status.sh`, `src/cmd/list.sh`
-
-Variables d’environnement propagées par `main.sh` aux sous-scripts:
+Exportées par `main.sh` (ou personnalisables avant exécution) :
 
 - `BENCH_DURATION`, `BENCH_REPEATS`, `BENCH_VERBOSE`
 - `INCLUDE_NODES`, `EXCLUDE_NODES`, `LIMIT_NODES`, `ONLY_NEW`
 - `TOP_MODE`
 - GPU spécifiques:
-  - `BENCH_PYTHON` — chemin de l’interpréteur Python (souvent celui de votre env Conda). Note: un env Conda actif est requis de toute façon.
-  - `BENCH_CONDA_ENV` — nom de l’environnement Conda à activer côté nœud (défaut: `bench`). En cas d’échec d’activation, le job GPU échoue.
+  - `BENCH_PYTHON` — interpréteur Python explicite (sinon l’env Conda actif)
+  - `BENCH_CONDA_ENV` — environnement à activer côté nœud (défaut `bench`)
+  - `BENCH_VRAM_FRAC` — fraction cible VRAM (0.05–0.95, défaut 0.80) pour ajuster la taille des buffers
+  - `GPU_WALLTIME_FACTOR` — facteur multiplicatif appliqué au walltime CPU estimé (défaut 10) pour les jobs GPU
 
 ## Walltime automatique
 
-`submit` estime automatiquement le walltime et le passe à `sbatch --time`:
+Formule CPU (estimée dans `bench_common.sh`) :
 
-```text
-wall ≈ 2 modes × repeats × duration × 1.5 + 60 s   (minimum 60 s)
+```math
+wall_cpu_seconds = max( 2 * repeats * duration * 1.5 + 60 , 60 )
 ```
+
+Pour les jobs GPU : `wall_gpu = wall_cpu_seconds * GPU_WALLTIME_FACTOR` (défaut ×10) pour couvrir la séquence multi‑backend + multi‑GPU.
 
 Ajustez `--repeats` et `--duration` selon le cluster.
 
 ## Format des résultats (CSV)
 
-Chaque nœud a son fichier CPU `results/cpu_<node>.csv` avec l’en-tête:
+### CPU
+
+`results/cpu_<node>.csv` :
 
 ```text
 node,mode,threads,runs,duration_s,avg_events_per_s,stddev_events_per_s,timestamp
@@ -185,17 +193,31 @@ node,mode,threads,runs,duration_s,avg_events_per_s,stddev_events_per_s,timestamp
 
 Le fichier cumule l’historique des runs; rien n’est écrasé.
 
-Résultats GPU (`results/gpu_<node>.csv`) — une ligne par exécution avec l’en-tête:
+### GPU
+
+`results/gpu_<node>.csv` — **une ligne par exécution** (schéma extensible) :
 
 ```text
-node,runs,duration_s,timestamp,(<backend>_mono_avg,<backend>_mono_std,<backend>_multi_avg,<backend>_multi_std,<backend>_multi_gpus)*
+node,runs,duration_s,timestamp,
+  (torch_mono_avg,torch_mono_std,torch_mono_vram_total_MB,torch_mono_vram_used_MB,torch_mono_vram_used_pct,
+   torch_multi_avg,torch_multi_std,torch_multi_gpus,torch_multi_vram_total_MB_sum,torch_multi_vram_used_MB_sum,torch_multi_vram_used_pct,
+   cupy_mono_...,cupy_multi_...,
+   numba_mono_...,numba_multi_...)
 ```
 
-où `<backend>` ∈ {torch, cupy, numba} selon disponibilité.
+Pour chaque backend présent (torch / cupy / numba) :
+
+- `*_mono_avg|std` : score mono‑GPU
+- `*_mono_vram_*` : VRAM totale du device, VRAM utilisée par les 4 buffers (MB), pourcentage utilisé
+- `*_multi_avg|std` : score multi‑GPU (ou répété mono si un seul GPU)
+- `*_multi_gpus` : nombre de GPUs utilisés (>=1)
+- `*_multi_vram_*_sum` : sommes agrégées sur l’ensemble des GPUs (si multi) ou mono répété
+
+Les colonnes manquantes (backend absent) restent vides.
 
 ## Exemples complets (tous paramètres)
 
-Exemple soumission GPU (non exclusive) avec toutes les options CLI et variables d'environnement utiles:
+Exemple soumission GPU (VRAM cible 70%) avec filtres et verbosité :
 
 ```bash
 # (optionnel) forcer l'interpréteur Python et/ou activer un env Conda côté nœud
@@ -214,7 +236,7 @@ export BENCH_CONDA_ENV=bench
           submit --gpu
 ```
 
-Exemple soumission CPU avec le même jeu d'options:
+Exemple soumission CPU avec le même jeu d'options :
 
 ```bash
 ./main.sh --repeats 5 \
@@ -227,7 +249,7 @@ Exemple soumission CPU avec le même jeu d'options:
           submit --cpu
 ```
 
-Exemples « top » avec les différents modes disponibles:
+Exemples « top » :
 
 ```bash
 # meilleur run par nœud (défaut)
@@ -245,18 +267,23 @@ Exemples « top » avec les différents modes disponibles:
 
 ## Détails techniques
 
-- Jobs CPU: `--exclusive`, `--ntasks-per-node=1`, `--cpus-per-task=<CPU du nœud>`.
-- Jobs GPU: `--ntasks-per-node=1`, `--cpus-per-task=8`, `--mem=20G`, `--gres=gpu:<tous_les_GPU_du_nœud>` (détection automatique du total via Slurm; pas d'`--exclusive`).
-- Le binaire `cpu_bench` utilise OpenMP et s’adapte à `OMP_NUM_THREADS`.
-- Un verrou léger par nœud empêche l’exécution concurrente sur le même nœud (si FS partagé).
-- Tri du « top » stable et locale fixée (LC_ALL=C) pour des classements reproductibles.
+CPU :
 
-Remarques GPU:
+- Soumission : `--ntasks-per-node=1`, `--cpus-per-task=<CPUTot>`, `--mem=0`, pas de `--exclusive` (permet coexistence avec d’autres jobs).
+- Binaire natif auto (une compilation par hôte) pour exploiter `-march=native` quand disponible.
+- Verrou fichier (`results/.lock.<host>`) pour éviter concurrence multi-job sur un même nœud.
 
-- Le bench GPU Python détecte dynamiquement les backends disponibles (torch, cupy, numba). (OpenCL a été retiré; voir la note ci-dessus.)
-- Structure séparée: `gpu_bench_core.py` (fonctions de bench) et `gpu_bench.py` (runner + CSV).
-- Le job GPU tente d’activer l’environnement Conda `BENCH_CONDA_ENV` (défaut `bench`). Si l’environnement n’est pas actif après cette étape, l’exécution échoue (pas de repli sur `python3`).
-- Le runner `gpu_bench.py` peut valider le nom via `--conda-env <name>` et refusera de s’exécuter sans env Conda actif.
+GPU :
+
+- Soumission : `--ntasks-per-node=1`, `--cpus-per-task=8`, `--gres=gpu:<total>`, `--mem=20G`.
+- Taille des buffers ajustée dynamiquement pour viser `BENCH_VRAM_FRAC` (par défaut 80% VRAM) avec fallback si OOM.
+- Multi‑GPU : exécution parallèle (threads Python) pour torch/cupy, agrégation séquentielle pour numba si nécessaire.
+- Colonnes VRAM : suivi (MB) et pourcentage utilisé.
+
+Général :
+
+- Classements stables (`LC_ALL=C`).
+- Nettoyage silencieux des fichiers `.err` vides en arrière‑plan (`cleanup_err_empty.sh`).
 
 ## Nettoyage
 
@@ -269,13 +296,16 @@ Remarques GPU:
 - OpenMP manquant: installez `gcc` (ou `clang`) avec support OpenMP.
 - Permissions Slurm: vérifiez que vous pouvez `sbatch` sur la partition par défaut du cluster.
 
-Conda/pyGPU:
+Conda / GPU :
 
-- Créez/activez l’env: `./main.sh build` prépare un env `bench` si Conda est présent.
-- Utiliser un Python précis avec Slurm: exportez `BENCH_PYTHON=/chemin/vers/conda/envs/bench/bin/python` avant `submit_gpu`.
-- Installation backends (exemples):
-  - PyTorch CUDA (ex.): `conda install -n bench -y -c pytorch pytorch pytorch-cuda=12.1 -c nvidia`
-  - CuPy (ex.): `pip install cupy-cuda12x` (ajustez selon votre CUDA)
+- Création env : `./main.sh build` (ou manuellement `conda create -n bench python=3.10 numpy numba`)
+- Forcer interpréteur : `export BENCH_PYTHON=~/miniconda3/envs/bench/bin/python`
+- Installer backends :
+  - PyTorch : `conda install -n bench -y -c pytorch pytorch pytorch-cuda=12.1 -c nvidia`
+  - CuPy : `pip install cupy-cuda12x` (ou variante correspondant à votre version CUDA)
+  - (Numba CUDA déjà présent via `numba`, nécessite drivers NVIDIA compatibles)
+
+VRAM : Ajuster la cible : `export BENCH_VRAM_FRAC=0.70` (ou `--vram-frac 0.70` avec `submit_gpu`).
 
 ---
 Suggestions ou améliorations bienvenues via issues/PRs.
