@@ -14,6 +14,59 @@ INCLUDE_NODES=${INCLUDE_NODES:-}
 EXCLUDE_NODES=${EXCLUDE_NODES:-}
 LIMIT_NODES=${LIMIT_NODES:-}
 GPU_WALLTIME_FACTOR=${GPU_WALLTIME_FACTOR:-10}  # facteur multiplicatif pour walltime GPU
+BENCH_CONDA_ENV=${BENCH_CONDA_ENV:-}
+
+# Activation / vérification conda côté front afin de propager les variables (CONDA_PREFIX, PATH, etc.) au job.
+ensure_conda_env() {
+  local target_env="$BENCH_CONDA_ENV"
+  # Si aucun env explicitement demandé mais un env actif existe, l'utiliser.
+  if [[ -z "$target_env" && -n "${CONDA_DEFAULT_ENV:-}" ]]; then
+    target_env="$CONDA_DEFAULT_ENV"; BENCH_CONDA_ENV="$target_env"; export BENCH_CONDA_ENV
+  fi
+  if [[ -z "$target_env" ]]; then
+    echo "[submit-gpu] ERREUR: aucun environnement conda actif et BENCH_CONDA_ENV non défini." >&2
+    echo "             Activez un env: 'conda activate bench' ou exportez BENCH_CONDA_ENV=bench." >&2
+    exit 1
+  fi
+
+  # Charger hook conda si nécessaire pour pouvoir activer.
+  if ! command -v conda >/dev/null 2>&1; then
+    if [[ -n "${CONDA_EXE:-}" ]]; then
+      eval "$("$CONDA_EXE" shell.bash hook)" >/dev/null 2>&1 || true
+    elif [[ -f "$HOME/miniconda3/etc/profile.d/conda.sh" ]]; then
+      # shellcheck source=/dev/null
+      source "$HOME/miniconda3/etc/profile.d/conda.sh" || true
+    elif [[ -f "$HOME/anaconda3/etc/profile.d/conda.sh" ]]; then
+      # shellcheck source=/dev/null
+      source "$HOME/anaconda3/etc/profile.d/conda.sh" || true
+    fi
+  fi
+  if ! command -v conda >/dev/null 2>&1; then
+    echo "[submit-gpu] ERREUR: conda introuvable sur le nœud de soumission." >&2
+    exit 1
+  fi
+
+  # Si l'env actif correspond déjà, ok.
+  local cur_env="${CONDA_DEFAULT_ENV:-}" cur_pref="${CONDA_PREFIX:-}"
+  if [[ "$cur_env" == "$target_env" || ( -n "$cur_pref" && "$cur_pref" =~ /$target_env$ ) ]]; then
+    (( BENCH_VERBOSE == 1 )) && echo "[submit-gpu] Env conda actif: $target_env"
+    return 0
+  fi
+
+  # Sinon tenter activation.
+  if ! conda env list 2>/dev/null | awk 'NF && $1 !~ /^#/ {sub(/\*.*/,"",$0);print $1}' | grep -Fxq "$target_env"; then
+    echo "[submit-gpu] ERREUR: environnement conda requis '$target_env' introuvable." >&2
+    exit 1
+  fi
+  conda activate "$target_env" 2>/dev/null || {
+    echo "[submit-gpu] ERREUR: échec activation de l'environnement '$target_env'." >&2
+    exit 1
+  }
+  (( BENCH_VERBOSE == 1 )) && echo "[submit-gpu] Environnement conda activé: $target_env"
+  BENCH_CONDA_ENV="$target_env"; export BENCH_CONDA_ENV
+}
+
+ensure_conda_env
 
 check_deps submit
 
@@ -105,7 +158,7 @@ for NODE in "${GPU_NODES[@]}"; do
       --time "$wall"
       --output "$OUT_DIR/bench_%N_gpu.out"
       --error "$OUT_DIR/bench_%N_gpu.err"
-      --export "ALL,BENCH_ROOT=$ROOT_DIR,BENCH_DURATION=$BENCH_DURATION,BENCH_REPEATS=$BENCH_REPEATS,BENCH_VERBOSE=$BENCH_VERBOSE,BENCH_VRAM_FRAC=${BENCH_VRAM_FRAC:-}"
+      --export "ALL,BENCH_ROOT=$ROOT_DIR,BENCH_DURATION=$BENCH_DURATION,BENCH_REPEATS=$BENCH_REPEATS,BENCH_VERBOSE=$BENCH_VERBOSE,BENCH_VRAM_FRAC=${BENCH_VRAM_FRAC:-},BENCH_CONDA_ENV=$BENCH_CONDA_ENV"
       "$JOB_SCRIPT" )
 
     if (( BENCH_VERBOSE == 1 )); then
