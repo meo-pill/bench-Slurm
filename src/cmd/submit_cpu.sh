@@ -90,19 +90,13 @@ for NODE in "${NODES[@]}"; do
 	# Calculer CPU libres sur le nœud
 	line=$(scontrol show node -o "$NODE" 2>/dev/null || true)
 	tot=$(sed -n 's/.*CPUTot=\([0-9]*\).*/\1/p' <<<"$line")
-	alloc=$(sed -n 's/.*CPUAlloc=\([0-9]*\).*/\1/p' <<<"$line")
-	free=$(( tot - alloc ))
-	if [[ -z "${free:-}" || "$free" -le 0 ]]; then
-		echo "[submit-cpu] $NODE: aucun CPU libre (tot=$tot alloc=$alloc), on saute."
-		continue
-	fi
-	echo "[submit-cpu] Soumission sur $NODE avec $free CPU libres"
+	echo "[submit-cpu] Soumission sur $NODE avec $tot CPU(s) total(s)."
 	sb_cmd=( sbatch
 			--job-name "$JOB_NAME"
 			--nodelist "$NODE"
 			--nodes 1
 			--ntasks-per-node 1
-			--cpus-per-task "$free"
+			--cpus-per-task "$tot"
 			--mem=0
 			--time "$wall"
 			--output "$OUT_DIR/bench_%N_cpu.out"
