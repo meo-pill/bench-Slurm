@@ -20,19 +20,6 @@ check_deps submit
 # build préalable
 "$SCRIPT_DIR/build.sh"
 
-# Fonction issue de src/list_free_gpu.sh: liste les nœuds avec GPU tous libres
-get_busy_gpu_nodes() {
-  # Liste les hôtes qui ont au moins un GPU alloué par des jobs RUNNING
-  squeue -h -o "%R %.b" --states=RUNNING \
-    | awk '$2 ~ /gpu/' \
-    | cut -d' ' -f1 \
-    | while read -r nodes; do scontrol show hostnames "$nodes"; done \
-    | sort -u
-}
-
-BUSY_GPU_NODES=$(get_busy_gpu_nodes || true)
-is_busy_node() { grep -qxF "$1" <<<"$BUSY_GPU_NODES"; }
-
 # Dresse la liste des nœuds avec GPU et leur quantité (une seule fois)
 nodes_with_gpu_counts() {
   for node in $(sinfo -h -N -o "%N"); do
@@ -103,13 +90,8 @@ wall_s="$(estimate_walltime)*$GPU_WALLTIME_FACTOR"
 wall=$(fmt_hms "$wall_s")
 echo "[submit-gpu] Walltime estimé: $wall (sec=$wall_s)"
 
-BUSY_GPU_NODES=$(get_busy_gpu_nodes || true)
 for NODE in "${GPU_NODES[@]}"; do
   # Vérifier au dernier moment si le nœud a des GPU occupés
-  if is_busy_node "$NODE"; then
-    (( BENCH_VERBOSE == 1 )) && echo "[submit-gpu] $NODE occupé (GPU en usage) — on saute."
-    continue
-  fi
   TOTAL_GPU=${GPU_COUNT[$NODE]:-0}
   echo "[submit-gpu] Soumission sur $NODE (GPU=$TOTAL_GPU)"
   sb_cmd=( sbatch

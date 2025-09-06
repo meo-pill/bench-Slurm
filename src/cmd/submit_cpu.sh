@@ -20,54 +20,18 @@ check_deps submit
 # build préalable
 "$SCRIPT_DIR/build.sh"
 
-echo "[submit-cpu] Détection des nœuds pour soumission (idle ou avec bench_gpu uniquement en cours)..."
+echo "[submit-cpu] Construction de la liste des nœuds (tous les nœuds visibles dans sinfo)."
 
-# Nœuds idle
-mapfile -t IDLE_NODES < <(idle_nodes)
-
-# Nœuds où un job GPU de bench tourne actuellement
-get_nodes_running_bench_gpu() {
-	local job_name="bench_gpu_node"
-	squeue -h --states=RUNNING -o "%N %j" \
-		| awk -v jn="$job_name" '$2==jn{print $1}' \
-		| while read -r nodelist; do scontrol show hostnames "$nodelist"; done \
-		| sort -u
-}
-mapfile -t GPU_BENCH_NODES < <(get_nodes_running_bench_gpu || true)
-
-# Filtrer: ne garder que les nœuds où tous les jobs RUNNING sont des jobs bench GPU
-bench_only_gpu_nodes() {
-	local job_gpu="bench_gpu_node"
-	local out=()
-	for n in "$@"; do
-		# Liste des noms de jobs RUNNING sur ce nœud
-		mapfile -t JN < <(squeue -h --states=RUNNING -w "$n" -o "%j" | sort -u)
-		local ok=1
-		for j in "${JN[@]:-}"; do
-			[[ "$j" == "$job_gpu" ]] || { ok=0; break; }
-		done
-		(( ok )) && out+=("$n")
-	done
-	printf '%s\n' "${out[@]:-}"
-}
-
-if (( ${#GPU_BENCH_NODES[@]} > 0 )); then
-	mapfile -t GPU_BENCH_NODES < <(bench_only_gpu_nodes "${GPU_BENCH_NODES[@]}" || true)
-fi
-
-# Union des deux listes (idle ∪ gpu-bench-only)
-mapfile -t NODES < <( { printf '%s\n' "${IDLE_NODES[@]:-}"; printf '%s\n' "${GPU_BENCH_NODES[@]:-}"; } | awk 'NF' | sort -u )
+# Récupérer tous les nœuds connus du cluster.
+mapfile -t NODES < <(sinfo -h -N -o '%N')
 
 if [[ ${#NODES[@]} -eq 0 ]]; then
-	echo "[submit-cpu] Aucun nœud idle ni avec bench_gpu en cours." >&2
-	exit 0
+	echo "[submit-cpu] Aucun nœud détecté via sinfo." >&2
+	exit 1
 fi
 
-(( BENCH_VERBOSE == 1 )) && {
-	echo "[submit-cpu] Idle: ${IDLE_NODES[*]:-none}"
-	echo "[submit-cpu] GPU-bench-only: ${GPU_BENCH_NODES[*]:-none}"
-}
-echo "[submit-cpu] Nœuds ciblés (union): ${NODES[*]}"
+(( BENCH_VERBOSE == 1 )) && echo "[submit-cpu] Total nœuds détectés: ${#NODES[@]} => ${NODES[*]}"
+echo "[submit-cpu] Nœuds initiaux: ${#NODES[@]}"
 
 # include
 if [[ -n "$INCLUDE_NODES" ]]; then
@@ -116,11 +80,6 @@ if (( ONLY_NEW )); then
 		fi
 	done
 	NODES=("${tmp[@]}")
-fi
-
-if [[ ${#NODES[@]} -eq 0 ]]; then
-	echo "[submit-cpu] Aucun nœud à soumettre après filtres." >&2
-	exit 0
 fi
 
 wall_s=$(estimate_walltime)
