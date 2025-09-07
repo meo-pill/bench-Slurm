@@ -16,7 +16,7 @@ LIMIT_NODES=""
 WARMUP_STEPS=5
 VRAM_FRAC=0.8
 GPU_WALLTIME_FACTOR=10
-BENCH_CONDA_ENV="${BENCH_CONDA_ENV:-}"  # on laisse la possibilité d'être pré-positionné
+BENCH_CONDA_ENV="${BENCH_CONDA_ENV:-bench}"  # on laisse la possibilité d'être pré-positionné
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
