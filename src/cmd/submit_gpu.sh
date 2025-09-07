@@ -36,15 +36,6 @@ done
 # Activation / vérification conda côté front afin de propager les variables (CONDA_PREFIX, PATH, etc.) au job.
 ensure_conda_env() {
     local target_env="$BENCH_CONDA_ENV"
-    # Si aucun env explicitement demandé mais un env actif existe, l'utiliser.
-    if [[ -z "$target_env" && -n "${CONDA_DEFAULT_ENV:-}" ]]; then
-        target_env="$CONDA_DEFAULT_ENV"; BENCH_CONDA_ENV="$target_env"; export BENCH_CONDA_ENV
-    fi
-    if [[ -z "$target_env" ]]; then
-        echo "[submit-gpu] ERREUR: aucun environnement conda actif et BENCH_CONDA_ENV non défini." >&2
-        echo "             Activez un env: 'conda activate bench' ou exportez BENCH_CONDA_ENV=bench." >&2
-        exit 1
-    fi
 
     # Charger hook conda si nécessaire pour pouvoir activer.
     if ! command -v conda >/dev/null 2>&1; then
@@ -61,13 +52,6 @@ ensure_conda_env() {
     if ! command -v conda >/dev/null 2>&1; then
         echo "[submit-gpu] ERREUR: conda introuvable sur le nœud de soumission." >&2
         exit 1
-    fi
-
-    # Si l'env actif correspond déjà, ok.
-    local cur_env="${CONDA_DEFAULT_ENV:-}" cur_pref="${CONDA_PREFIX:-}"
-    if [[ "$cur_env" == "$target_env" || ( -n "$cur_pref" && "$cur_pref" =~ /$target_env$ ) ]]; then
-        (( BENCH_VERBOSE == 1 )) && echo "[submit-gpu] Env conda actif: $target_env"
-        return 0
     fi
 
     # Sinon tenter activation.
@@ -188,3 +172,7 @@ for NODE in "${GPU_NODES[@]}"; do
 done
 
 echo "[submit-gpu] Soumissions terminées."
+
+echo "[submit-gpu] Retour a l'environnement initial."
+conda deactivate
+
