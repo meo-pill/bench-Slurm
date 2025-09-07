@@ -38,16 +38,12 @@ ensure_conda_env() {
     local target_env="$BENCH_CONDA_ENV"
 
     # Charger hook conda si nécessaire pour pouvoir activer.
-    if ! command -v conda >/dev/null 2>&1; then
-        if [[ -n "${CONDA_EXE:-}" ]]; then
-            eval "$("$CONDA_EXE" shell.bash hook)" >/dev/null 2>&1 || true
-        elif [[ -f "$HOME/miniconda3/etc/profile.d/conda.sh" ]]; then
-            # shellcheck source=/dev/null
-            source "$HOME/miniconda3/etc/profile.d/conda.sh" || true
-        elif [[ -f "$HOME/anaconda3/etc/profile.d/conda.sh" ]]; then
-            # shellcheck source=/dev/null
+    if [[ -f "$HOME/miniconda3/etc/profile.d/conda.sh" ]]; then
+        # shellcheck source=/dev/null
+        source "$HOME/miniconda3/etc/profile.d/conda.sh" || true
+    elif [[ -f "$HOME/anaconda3/etc/profile.d/conda.sh" ]]; then
+        # shellcheck source=/dev/null
             source "$HOME/anaconda3/etc/profile.d/conda.sh" || true
-        fi
     fi
     if ! command -v conda >/dev/null 2>&1; then
         echo "[submit-gpu] ERREUR: conda introuvable sur le nœud de soumission." >&2
