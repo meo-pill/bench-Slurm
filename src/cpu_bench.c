@@ -44,7 +44,7 @@ static void usage(const char *prog) {
 }
 
 int main(int argc, char **argv) {
-    double dur = 2.0;
+    double dur = 3.0;
     int verbose = 0;
     for (int i = 1; i < argc; ++i) {
         if (strcmp(argv[i], "--duration") == 0 && i + 1 < argc) {

@@ -9,8 +9,8 @@ ROOT_DIR=$(cd "$(dirname "$0")" && pwd)
 CMD_DIR="$ROOT_DIR/src/cmd"
 
 # Valeurs par défaut (purement locales; on passera via arguments)
-BENCH_DURATION=2.0   # secondes par mesure
-BENCH_REPEATS=3      # répétitions pour moyenne/écart-type
+BENCH_DURATION=3.0   # secondes par mesure
+BENCH_REPEATS=5      # répétitions pour moyenne/écart-type
 TOP_MODE=unique      # unique | unique-last | top10 | by-node-mean
 INCLUDE_NODES=""    # liste séparée par virgules
 EXCLUDE_NODES=""    # liste séparée par virgules

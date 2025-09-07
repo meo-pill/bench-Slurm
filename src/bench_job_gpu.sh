@@ -33,8 +33,8 @@ enforce_conda_presence() {
 enforce_conda_presence
 
 HOST=$(hostname -s)
-DUR=2.0
-REPEATS=3
+DUR=3.0
+REPEATS=5
 VERBOSE=0
 WARMUP_ARG=""
 VRAM_FRAC_ARG=""

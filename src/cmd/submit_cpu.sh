@@ -7,8 +7,8 @@ JOB_SCRIPT="$ROOT_DIR/src/bench_job_cpu.sh"
 JOB_NAME="bench_cpu_node"
 
 # Paramètres par défaut (écrasés par arguments)
-BENCH_DURATION=2.0
-BENCH_REPEATS=3
+BENCH_DURATION=3.0
+BENCH_REPEATS=5
 BENCH_VERBOSE=0
 INCLUDE_NODES=""
 EXCLUDE_NODES=""
