@@ -169,9 +169,9 @@ for NODE in "${GPU_NODES[@]}"; do
         --nodelist "$NODE"
         --nodes 1
         --ntasks-per-node 1
-        --cpus-per-task 8
+        --cpus-per-task 4
         --gres=gpu:"$TOTAL_GPU"
-        --mem=20G
+        --mem=10G
         --time "$wall"
         --output "$OUT_DIR/bench_%N_gpu.out"
         --error "$OUT_DIR/bench_%N_gpu.err"
