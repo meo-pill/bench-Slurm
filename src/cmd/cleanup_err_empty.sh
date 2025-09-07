@@ -10,21 +10,21 @@ JOBN_GPU="bench_gpu_node"
 
 # Éviter les doublons via pidfile
 if [[ -f "$PID_FILE" ]]; then
-  old_pid=$(cat "$PID_FILE" || true)
-  if [[ -n "${old_pid:-}" ]] && ps -p "$old_pid" -o comm= >/dev/null 2>&1; then
-    exit 0
-  fi
+    old_pid=$(cat "$PID_FILE" || true)
+    if [[ -n "${old_pid:-}" ]] && ps -p "$old_pid" -o comm= >/dev/null 2>&1; then
+        exit 0
+    fi
 fi
 echo $$ > "$PID_FILE"
 
 # Attendre la fin de tous les jobs bench (CPU/GPU) du user
 while true; do
-  # squeue retourne 0 même s'il n'y a rien; on teste le nombre de lignes
-  cnt=$(squeue -h -u "$USER" -n "$JOBN_CPU,$JOBN_GPU" | wc -l | tr -d ' ')
-  if [[ "$cnt" == "0" ]]; then
-    break
-  fi
-  sleep 15
+    # squeue retourne 0 même s'il n'y a rien; on teste le nombre de lignes
+    cnt=$(squeue -h -u "$USER" -n "$JOBN_CPU,$JOBN_GPU" | wc -l | tr -d ' ')
+    if [[ "$cnt" == "0" ]]; then
+        break
+    fi
+    sleep 15
 done
 
 # petite marge pour que Slurm flush les fichiers

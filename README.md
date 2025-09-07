@@ -124,6 +124,11 @@ Conda (obligatoire GPU) :
 - `--only-new` — ne lancer que sur les nœuds sans résultats (CSV absent ou présent sans ligne de données)
 - `--verbose` — sortie plus détaillée (traces de soumission, commandes sbatch)
 
+Options GPU supplémentaires (passées uniquement via arguments maintenant):
+
+- `--vram-frac F` — fraction de VRAM cible (0.05–0.95, défaut 0.80)
+- `--warmup N` — itérations de warmup GPU (0–50, défaut 5) avant chaque mesure
+
 Options de « top » (mutuellement exclusives, défaut `--unique`):
 
 - `--unique` — meilleur run par nœud
@@ -150,18 +155,15 @@ Exemples :
 ./main.sh list
 ```
 
-## Variables d’environnement principales
+## Variables d’environnement utiles
 
-Exportées par `main.sh` (ou personnalisables avant exécution) :
+La configuration se fait désormais via arguments CLI (voir sections ci‑dessus). Les variables ci‑dessous restent optionnelles pour l’infrastructure ou la compatibilité:
 
-- `BENCH_DURATION`, `BENCH_REPEATS`, `BENCH_VERBOSE`
-- `INCLUDE_NODES`, `EXCLUDE_NODES`, `LIMIT_NODES`, `ONLY_NEW`
-- `TOP_MODE`
-- GPU spécifiques:
-  - `BENCH_PYTHON` — interpréteur Python explicite (sinon l’env Conda actif)
-  - `BENCH_CONDA_ENV` — environnement à activer côté nœud (défaut `bench`)
-  - `BENCH_VRAM_FRAC` — fraction cible VRAM (0.05–0.95, défaut 0.80) pour ajuster la taille des buffers
-  - `GPU_WALLTIME_FACTOR` — facteur multiplicatif appliqué au walltime CPU estimé (défaut 10) pour les jobs GPU
+- `BENCH_PYTHON` — chemin explicite de l'interpréteur Python (sinon `python3` de l'env actif)
+- `BENCH_CONDA_ENV` — nom d'environnement conda attendu côté nœud (validation de cohérence)
+- `GPU_WALLTIME_FACTOR` — (optionnel) multiplier le walltime estimé GPU (défaut: 10) si défini avant `submit_gpu`
+
+Les anciennes variables `BENCH_VRAM_FRAC`, `BENCH_WARMUP_STEPS`, `BENCH_DURATION`, `BENCH_REPEATS` ne sont plus lues par les scripts de bench; utilisez les flags CLI.
 
 ## Walltime automatique
 
@@ -233,7 +235,9 @@ export BENCH_CONDA_ENV=bench
           --limit 2 \
           --only-new \
           --verbose \
-          submit --gpu
+          --vram-frac 0.70 \
+          --warmup 8 \
+          submit_gpu
 ```
 
 Exemple soumission CPU avec le même jeu d'options :
@@ -246,7 +250,7 @@ Exemple soumission CPU avec le même jeu d'options :
           --limit 2 \
           --only-new \
           --verbose \
-          submit --cpu
+          submit_cpu
 ```
 
 Exemples « top » :
@@ -276,7 +280,7 @@ CPU :
 GPU :
 
 - Soumission : `--ntasks-per-node=1`, `--cpus-per-task=8`, `--gres=gpu:<total>`, `--mem=20G`.
-- Taille des buffers ajustée dynamiquement pour viser `BENCH_VRAM_FRAC` (par défaut 80% VRAM) avec fallback si OOM.
+- Taille des buffers ajustée dynamiquement pour viser la fraction donnée par `--vram-frac` (défaut 0.80) avec réduction si OOM.
 - Multi‑GPU : exécution parallèle (threads Python) pour torch/cupy, agrégation séquentielle pour numba si nécessaire.
 - Colonnes VRAM : suivi (MB) et pourcentage utilisé.
 
@@ -305,7 +309,7 @@ Conda / GPU :
   - CuPy : `pip install cupy-cuda12x` (ou variante correspondant à votre version CUDA)
   - (Numba CUDA déjà présent via `numba`, nécessite drivers NVIDIA compatibles)
 
-VRAM : Ajuster la cible : `export BENCH_VRAM_FRAC=0.70` (ou `--vram-frac 0.70` avec `submit_gpu`).
+VRAM / Warmup : utiliser directement `--vram-frac` et `--warmup` (ex: `--vram-frac 0.70 --warmup 10`).
 
 ---
 Suggestions ou améliorations bienvenues via issues/PRs.

@@ -10,9 +10,25 @@ RES_DIR="$ROOT_DIR/results"
 
 HOST=$(hostname -s)
 CPUS=${SLURM_CPUS_ON_NODE:-$(nproc)}
-DUR=${BENCH_DURATION:-2.0}
-REPEATS=${BENCH_REPEATS:-3}
-VERBOSE=${BENCH_VERBOSE:-0}
+DUR=2.0
+REPEATS=3
+VERBOSE=0
+
+# Parsing des arguments transmis par submit_cpu.sh
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --duration)
+      DUR="${2:?valeur manquante pour --duration}"; shift 2 ;;
+    --repeats)
+      REPEATS="${2:?valeur manquante pour --repeats}"; shift 2 ;;
+    --verbose)
+      VERBOSE=1; shift ;;
+    --)
+      shift; break ;;
+    *)
+      echo "[bench_job_cpu] option inconnue: $1" >&2; exit 1 ;;
+  esac
+done
 
 # Empêcher une exécution concurrente si le répertoire est partagé
 lockfile="$RES_DIR/.lock.$HOST"

@@ -8,11 +8,11 @@ check_deps list
 echo "=== Nœuds du cluster et nombre de runs enregistrés ==="
 mapfile -t NODES < <(sinfo -h -N -o '%N')
 for NODE in "${NODES[@]}"; do
-  f="$RES_DIR/cpu_$NODE.csv"
-  if [[ -f "$f" ]]; then
-    runs=$(awk -F, 'FNR==1{next} $2=="mono"{c++} END{print c+0}' "$f")
-  else
-    runs=0
-  fi
-  printf "%s %d\n" "$NODE" "$runs"
+    f="$RES_DIR/cpu_$NODE.csv"
+    if [[ -f "$f" ]]; then
+        runs=$(awk -F, 'FNR==1{next} $2=="mono"{c++} END{print c+0}' "$f")
+    else
+        runs=0
+    fi
+    printf "%s %d\n" "$NODE" "$runs"
 done | sort -s -k1,1

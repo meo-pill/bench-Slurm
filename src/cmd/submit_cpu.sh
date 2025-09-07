@@ -101,8 +101,11 @@ for NODE in "${NODES[@]}"; do
 			--time "$wall"
 			--output "$OUT_DIR/bench_%N_cpu.out"
 			--error "$OUT_DIR/bench_%N_cpu.err"
-			--export "ALL,BENCH_ROOT=$ROOT_DIR,BENCH_DURATION=$BENCH_DURATION,BENCH_REPEATS=$BENCH_REPEATS,BENCH_VERBOSE=$BENCH_VERBOSE"
-			"$JOB_SCRIPT" )
+			--export "ALL,BENCH_ROOT=$ROOT_DIR"
+			"$JOB_SCRIPT" --duration "$BENCH_DURATION" --repeats "$BENCH_REPEATS" )
+	if (( BENCH_VERBOSE == 1 )); then
+		sb_cmd+=( --verbose )
+	fi
 
 	if (( BENCH_VERBOSE == 1 )); then
 		printf '[submit-cpu] CMD: '

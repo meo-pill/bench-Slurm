@@ -19,7 +19,7 @@ import math
 from gpu_bench_core import (
     bench_torch, bench_cupy, bench_numba,
     list_devices_torch, list_devices_cupy, list_devices_numba,
-    bench_torch_multi, bench_cupy_multi, set_vram_target,
+    bench_torch_multi, bench_cupy_multi, set_vram_target, set_warmup_steps,
 )
 
 
@@ -77,6 +77,7 @@ def main():
     p.add_argument('--csv-dir', type=str, default=os.path.join(os.path.dirname(os.path.dirname(__file__)), 'outputs'), help='répertoire pour stocker le CSV consolidé')
     p.add_argument('--node', type=str, default=socket.gethostname().split('.')[0], help='nom du nœud pour les CSV')
     p.add_argument('--vram-frac', type=float, default=None, help='fraction VRAM cible (0.05-0.95) pour ajuster la taille des buffers GPU')
+    p.add_argument('--warmup', type=int, default=None, help='override du nombre d\'itérations de warmup (0..50)')
     args = p.parse_args()
 
     # Vérifie conda actif et (optionnellement) le nom d'env requis
@@ -89,6 +90,10 @@ def main():
         set_vram_target(args.vram_frac)
         if args.verbose:
             print(f"[cfg] VRAM target fraction override: {args.vram_frac:.3f}")
+    if args.warmup is not None:
+        set_warmup_steps(args.warmup)
+        if args.verbose:
+            print(f"[cfg] Warmup steps override: {args.warmup}")
 
     # Prépare CSV dir
     csv_dir = args.csv_dir

@@ -33,9 +33,30 @@ enforce_conda_presence() {
 enforce_conda_presence
 
 HOST=$(hostname -s)
-DUR=${BENCH_DURATION:-2.0}
-REPEATS=${BENCH_REPEATS:-3}
-VERBOSE=${BENCH_VERBOSE:-0}
+DUR=2.0
+REPEATS=3
+VERBOSE=0
+WARMUP_ARG=""
+VRAM_FRAC_ARG=""
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --duration)
+      DUR="${2:?valeur manquante pour --duration}"; shift 2 ;;
+    --repeats)
+      REPEATS="${2:?valeur manquante pour --repeats}"; shift 2 ;;
+    --verbose)
+      VERBOSE=1; shift ;;
+    --warmup)
+      WARMUP_ARG="${2:?valeur manquante pour --warmup}"; shift 2 ;;
+    --vram-frac)
+      VRAM_FRAC_ARG="${2:?valeur manquante pour --vram-frac}"; shift 2 ;;
+    --)
+      shift; break ;;
+    *)
+      echo "[bench_job_gpu] option inconnue: $1" >&2; exit 1 ;;
+  esac
+done
 
 mkdir -p "$OUT_DIR" "$RES_DIR"
 
@@ -99,6 +120,8 @@ CMD=("$PY" "$SRC_DIR/gpu_bench.py" --duration "$DUR" --repeats "$REPEATS" --node
 if [[ -n "${BENCH_CONDA_ENV:-}" ]]; then
   CMD+=(--conda-env "$BENCH_CONDA_ENV")
 fi
+[[ -n "$WARMUP_ARG" ]] && CMD+=(--warmup "$WARMUP_ARG")
+[[ -n "$VRAM_FRAC_ARG" ]] && CMD+=(--vram-frac "$VRAM_FRAC_ARG")
 (( VERBOSE == 1 )) && CMD+=(--verbose)
 
 # Lancer en laissant stderr aller au .err Slurm; ne pas faire échouer le job

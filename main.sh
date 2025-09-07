@@ -28,7 +28,7 @@ Syntaxe générale:
 
 Commandes disponibles:
     build         Compile le binaire CPU et prépare l'env (optionnel)
-    submit        Soumet d'abord des jobs GPU puis CPU (routeur auto)
+    submit        Routeur auto: tente GPU puis CPU
     submit_cpu    Soumet uniquement des jobs CPU
     submit_gpu    Soumet uniquement des jobs GPU
     top           Affiche les classements CPU/GPU
@@ -47,6 +47,7 @@ Flags globaux (affectent submit/submit_cpu/submit_gpu):
 
 Flags spécifiques GPU (submit / submit_gpu uniquement):
     --vram-frac F          Fraction VRAM cible pour ajuster la taille des buffers (0.05..0.95, défaut 0.80)
+    --warmup N             Nombre d'itérations de warmup GPU (0..50, défaut 5) avant mesures
 
 Flags spécifiques top:
     --unique                (défaut) Meilleur run par nœud
@@ -64,7 +65,7 @@ Exemples:
     ./main.sh --repeats 5 --duration 3 --limit 5 submit
 
     # Forcer GPU uniquement avec 70% VRAM cible
-    ./main.sh submit_gpu --vram-frac 0.70
+    ./main.sh --vram-frac 0.70 submit_gpu
 
     # Classement top10
     ./main.sh --top10 top
@@ -94,6 +95,8 @@ while [[ $# -gt 0 ]]; do
             BENCH_VERBOSE=1; shift ;;
         --vram-frac)
             BENCH_VRAM_FRAC="${2:?valeur manquante pour --vram-frac}"; shift 2 ;;
+        --warmup)
+            BENCH_WARMUP_STEPS="${2:?valeur manquante pour --warmup}"; shift 2 ;;
         --unique)
             TOP_MODE="unique"; shift ;;
         --unique-last)
@@ -113,7 +116,7 @@ done
 [[ -z "${cmd:-}" ]] && cmd="submit"
 
 # Export des variables pour les sous-scripts
-export BENCH_DURATION BENCH_REPEATS TOP_MODE INCLUDE_NODES EXCLUDE_NODES LIMIT_NODES ONLY_NEW BENCH_VERBOSE BENCH_VRAM_FRAC
+export BENCH_DURATION BENCH_REPEATS TOP_MODE INCLUDE_NODES EXCLUDE_NODES LIMIT_NODES ONLY_NEW BENCH_VERBOSE BENCH_VRAM_FRAC BENCH_WARMUP_STEPS
 
 case "$cmd" in
     build)
