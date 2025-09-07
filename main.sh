@@ -8,15 +8,17 @@ set -euo pipefail
 ROOT_DIR=$(cd "$(dirname "$0")" && pwd)
 CMD_DIR="$ROOT_DIR/src/cmd"
 
-# Valeurs par défaut (exportées pour les sous-scripts)
-BENCH_DURATION=${BENCH_DURATION:-2.0}  # secondes par mesure
-BENCH_REPEATS=${BENCH_REPEATS:-3}      # répétitions pour moyenne/écart-type
-TOP_MODE=${TOP_MODE:-unique}           # unique | unique-last | top10 | by-node-mean
-INCLUDE_NODES=${INCLUDE_NODES:-}       # liste séparée par des virgules
-EXCLUDE_NODES=${EXCLUDE_NODES:-}       # liste séparée par des virgules
-LIMIT_NODES=${LIMIT_NODES:-}           # limite numérique d'envoi
-ONLY_NEW=${ONLY_NEW:-0}                # si 1, ne lance que sur nœuds sans résultats
-BENCH_VERBOSE=${BENCH_VERBOSE:-0}      # si 1, verbosité accrue
+# Valeurs par défaut (purement locales; on passera via arguments)
+BENCH_DURATION=2.0   # secondes par mesure
+BENCH_REPEATS=3      # répétitions pour moyenne/écart-type
+TOP_MODE=unique      # unique | unique-last | top10 | by-node-mean
+INCLUDE_NODES=""    # liste séparée par virgules
+EXCLUDE_NODES=""    # liste séparée par virgules
+LIMIT_NODES=""      # limite numérique d'envoi
+ONLY_NEW=0           # si 1, ne lance que sur nœuds sans résultats (CPU/GPU) (TODO: implémenter logique)
+BENCH_VERBOSE=0      # si 1, verbosité accrue
+BENCH_VRAM_FRAC=""
+BENCH_WARMUP_STEPS=""
 LC_ALL=C; export LC_ALL
 
 usage() {
@@ -115,20 +117,29 @@ while [[ $# -gt 0 ]]; do
 done
 [[ -z "${cmd:-}" ]] && cmd="submit"
 
-# Export des variables pour les sous-scripts
-export BENCH_DURATION BENCH_REPEATS TOP_MODE INCLUDE_NODES EXCLUDE_NODES LIMIT_NODES ONLY_NEW BENCH_VERBOSE BENCH_VRAM_FRAC BENCH_WARMUP_STEPS
+COMMON_ARGS=( --duration "$BENCH_DURATION" --repeats "$BENCH_REPEATS" )
+[[ -n "$INCLUDE_NODES" ]] && COMMON_ARGS+=( --include "$INCLUDE_NODES" )
+[[ -n "$EXCLUDE_NODES" ]] && COMMON_ARGS+=( --exclude "$EXCLUDE_NODES" )
+[[ -n "$LIMIT_NODES" ]] && COMMON_ARGS+=( --limit "$LIMIT_NODES" )
+(( ONLY_NEW == 1 )) && COMMON_ARGS+=( --only-new )
+(( BENCH_VERBOSE == 1 )) && COMMON_ARGS+=( --verbose )
+[[ -n "$BENCH_VRAM_FRAC" ]] && COMMON_ARGS+=( --vram-frac "$BENCH_VRAM_FRAC" )
+[[ -n "$BENCH_WARMUP_STEPS" ]] && COMMON_ARGS+=( --warmup "$BENCH_WARMUP_STEPS" )
+
+TOP_ARGS=( --mode "$TOP_MODE" )
+(( BENCH_VERBOSE == 1 )) && TOP_ARGS+=( --verbose )
 
 case "$cmd" in
     build)
         bash "$CMD_DIR/build.sh" ;;
     submit)
-        bash "$CMD_DIR/submit.sh" ;;
+        bash "$CMD_DIR/submit.sh" "${COMMON_ARGS[@]}" ;;
     submit_cpu)
-        bash "$CMD_DIR/submit_cpu.sh" ;;
+        bash "$CMD_DIR/submit_cpu.sh" "${COMMON_ARGS[@]}" ;;
     submit_gpu)
-        bash "$CMD_DIR/submit_gpu.sh" ;;
+        bash "$CMD_DIR/submit_gpu.sh" "${COMMON_ARGS[@]}" ;;
     top)
-        bash "$CMD_DIR/top.sh" ;;
+        bash "$CMD_DIR/top.sh" "${TOP_ARGS[@]}" ;;
     status)
         bash "$CMD_DIR/status.sh" ;;
     list)

@@ -52,7 +52,8 @@ fmt_hms() {
 
 # Estimation walltime: 2 modes (mono+multi) * repeats * duration * 1.5 + 60s marge
 estimate_walltime() {
-    local repeats=${BENCH_REPEATS:-3}
-    local duration=${BENCH_DURATION:-2.0}
+    # Usage: estimate_walltime <repeats> <duration>
+    local repeats=${1:-3}
+    local duration=${2:-2.0}
     awk -v r="$repeats" -v d="$duration" 'BEGIN{s=int((2*r*d*1.5)+60); if(s<60)s=60; print s}'
 }

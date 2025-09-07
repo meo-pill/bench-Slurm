@@ -52,7 +52,7 @@ if [[ ! -x "$NATIVE_BIN" ]]; then
   make -C "$ROOT_DIR/src" native-host HOSTNAME="$HOST" PREFIX="$ROOT_DIR" >/dev/null 2>&1 || true
 fi
 
-# Choix du binaire: natif si dispo, sinon générique
+# Choix du binaire: natif si disponible, sinon générique
 if [[ -x "$NATIVE_BIN" ]]; then
   BENCH_BIN="$NATIVE_BIN"
   (( VERBOSE == 1 )) && echo "[bench] Using native binary: $BENCH_BIN"

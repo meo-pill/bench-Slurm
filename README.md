@@ -5,7 +5,7 @@ Outil de benchmark CPU & GPU orchestré par Slurm :
 - Compilation d’un binaire CPU OpenMP (portable + binaire natif par hôte si possible)
 - Soumission de jobs CPU (non exclusifs, allouant **tous les CPU du nœud** via `CPUTot`)
 - Soumission de jobs GPU (tous les GPU du nœud, VRAM adaptative)
-- Résultats persistés en CSV (historique cumulatif)
+- Résultats persistant en CSV (historique cumulatif)
 - Classements (« top ») multi‑critères CPU et GPU
 - Ajustement dynamique de la taille des buffers GPU selon la VRAM disponible
 
@@ -121,7 +121,7 @@ Conda (obligatoire GPU) :
 - `--include n1,n2` — ne garder que ces nœuds
 - `--exclude nX,nY` — exclure ces nœuds
 - `--limit N` — limiter au N premiers nœuds après filtres
-- `--only-new` — ne lancer que sur les nœuds sans résultats (CSV absent ou présent sans ligne de données)
+- `--only-new` — (TODO / non implémenté actuellement dans la logique de filtrage) prévu pour ne lancer que sur les nœuds sans résultats
 - `--verbose` — sortie plus détaillée (traces de soumission, commandes sbatch)
 
 Options GPU supplémentaires (passées uniquement via arguments maintenant):
@@ -164,6 +164,7 @@ La configuration se fait désormais via arguments CLI (voir sections ci‑dessus
 - `GPU_WALLTIME_FACTOR` — (optionnel) multiplier le walltime estimé GPU (défaut: 10) si défini avant `submit_gpu`
 
 Les anciennes variables `BENCH_VRAM_FRAC`, `BENCH_WARMUP_STEPS`, `BENCH_DURATION`, `BENCH_REPEATS` ne sont plus lues par les scripts de bench; utilisez les flags CLI.
+Les filtres/paramètres sont désormais *exclusivement* véhiculés par arguments (pas d'environnement caché) — sauf `BENCH_CONDA_ENV` si vous devez imposer un nom d'environnement à activer sur les nœuds.
 
 ## Walltime automatique
 

@@ -14,7 +14,7 @@ echo "[build] OK"
 # préparer un environnement Conda pour le bench GPU
 setup_conda_env() {
     echo "[build] Préparation de l'environnement Conda (optionnel)…"
-    # Tenter d'initialiser conda si la fonction/commande n'est pas déjà dispo
+    # Tenter d'initialiser conda si la fonction/commande n'est pas déjà disponble
     if ! command -v conda >/dev/null 2>&1; then
         if [[ -n "${CONDA_EXE:-}" ]]; then
             eval "$("$CONDA_EXE" shell.bash hook)" >/dev/null 2>&1 || true

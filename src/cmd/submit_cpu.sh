@@ -6,14 +6,28 @@ source "$SCRIPT_DIR/../lib/bench_common.sh"
 JOB_SCRIPT="$ROOT_DIR/src/bench_job_cpu.sh"
 JOB_NAME="bench_cpu_node"
 
-# Lire variables d'environnement par défaut
-BENCH_DURATION=${BENCH_DURATION:-2.0}
-BENCH_REPEATS=${BENCH_REPEATS:-3}
-BENCH_VERBOSE=${BENCH_VERBOSE:-0}
-INCLUDE_NODES=${INCLUDE_NODES:-}
-EXCLUDE_NODES=${EXCLUDE_NODES:-}
-LIMIT_NODES=${LIMIT_NODES:-}
-ONLY_NEW=${ONLY_NEW:-0}
+# Paramètres par défaut (écrasés par arguments)
+BENCH_DURATION=2.0
+BENCH_REPEATS=3
+BENCH_VERBOSE=0
+INCLUDE_NODES=""
+EXCLUDE_NODES=""
+LIMIT_NODES=""
+ONLY_NEW=0
+
+while [[ $# -gt 0 ]]; do
+	case "$1" in
+		--duration) BENCH_DURATION="${2:?}"; shift 2 ;;
+		--repeats) BENCH_REPEATS="${2:?}"; shift 2 ;;
+		--verbose) BENCH_VERBOSE=1; shift ;;
+		--include) INCLUDE_NODES="${2:?}"; shift 2 ;;
+		--exclude) EXCLUDE_NODES="${2:?}"; shift 2 ;;
+		--limit) LIMIT_NODES="${2:?}"; shift 2 ;;
+		--only-new) ONLY_NEW=1; shift ;;
+		--) shift; break ;;
+		*) echo "[submit-cpu] option inconnue: $1" >&2; exit 1 ;;
+	esac
+done
 
 check_deps submit
 
@@ -82,7 +96,7 @@ if (( ONLY_NEW )); then
 	NODES=("${tmp[@]}")
 fi
 
-wall_s=$(estimate_walltime)
+wall_s=$(estimate_walltime "$BENCH_REPEATS" "$BENCH_DURATION")
 wall=$(fmt_hms "$wall_s")
 echo "[submit-cpu] Walltime estimé: $wall (sec=$wall_s)"
 

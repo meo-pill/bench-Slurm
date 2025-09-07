@@ -3,7 +3,21 @@ set -euo pipefail
 SCRIPT_DIR=$(cd "$(dirname "$0")" && pwd)
 source "$SCRIPT_DIR/../lib/bench_common.sh"
 
-TOP_MODE=${TOP_MODE:-unique}
+TOP_MODE=unique
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --mode) TOP_MODE="${2:?}"; shift 2 ;;
+    --unique) TOP_MODE=unique; shift ;;
+    --unique-last) TOP_MODE=unique-last; shift ;;
+    --top10) TOP_MODE=top10; shift ;;
+    --by-node-mean) TOP_MODE=by-node-mean; shift ;;
+    -h|--help)
+      echo "Usage: top.sh [--mode M] | [--unique|--unique-last|--top10|--by-node-mean]"; exit 0 ;;
+    --) shift; break ;;
+    *) echo "[top] option inconnue: $1" >&2; exit 1 ;;
+  esac
+done
 
 check_deps top
 

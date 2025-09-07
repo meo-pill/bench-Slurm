@@ -6,15 +6,32 @@ source "$SCRIPT_DIR/../lib/bench_common.sh"
 JOB_SCRIPT="$ROOT_DIR/src/bench_job_gpu.sh"
 JOB_NAME="bench_gpu_node"
 
-# Lire variables d'environnement par défaut
-BENCH_DURATION=${BENCH_DURATION:-2.0}
-BENCH_REPEATS=${BENCH_REPEATS:-3}
-BENCH_VERBOSE=${BENCH_VERBOSE:-0}
-INCLUDE_NODES=${INCLUDE_NODES:-}
-EXCLUDE_NODES=${EXCLUDE_NODES:-}
-LIMIT_NODES=${LIMIT_NODES:-}
-GPU_WALLTIME_FACTOR=${GPU_WALLTIME_FACTOR:-10}  # facteur multiplicatif pour walltime GPU
-BENCH_CONDA_ENV=${BENCH_CONDA_ENV:-}
+# Valeurs par défaut (écrasées par arguments CLI)
+BENCH_DURATION=2.0
+BENCH_REPEATS=3
+BENCH_VERBOSE=0
+INCLUDE_NODES=""
+EXCLUDE_NODES=""
+LIMIT_NODES=""
+WARMUP_STEPS=5
+VRAM_FRAC=0.8
+GPU_WALLTIME_FACTOR=10
+BENCH_CONDA_ENV="${BENCH_CONDA_ENV:-}"  # on laisse la possibilité d'être pré-positionné
+
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --duration) BENCH_DURATION="${2:?}"; shift 2 ;;
+        --repeats) BENCH_REPEATS="${2:?}"; shift 2 ;;
+        --verbose) BENCH_VERBOSE=1; shift ;;
+        --include) INCLUDE_NODES="${2:?}"; shift 2 ;;
+        --exclude) EXCLUDE_NODES="${2:?}"; shift 2 ;;
+        --limit) LIMIT_NODES="${2:?}"; shift 2 ;;
+        --warmup) WARMUP_STEPS="${2:?}"; shift 2 ;;
+        --vram-frac) VRAM_FRAC="${2:?}"; shift 2 ;;
+        --) shift; break ;;
+        *) echo "[submit-gpu] option inconnue: $1" >&2; exit 1 ;;
+    esac
+done
 
 # Activation / vérification conda côté front afin de propager les variables (CONDA_PREFIX, PATH, etc.) au job.
 ensure_conda_env() {
@@ -139,7 +156,7 @@ if [[ ${#GPU_NODES[@]} -eq 0 ]]; then
     exit 0
 fi
 
-wall_s="$(estimate_walltime)*$GPU_WALLTIME_FACTOR"
+wall_s=$(( $(estimate_walltime "$BENCH_REPEATS" "$BENCH_DURATION") * GPU_WALLTIME_FACTOR ))
 wall=$(fmt_hms "$wall_s")
 echo "[submit-gpu] Walltime estimé: $wall (sec=$wall_s)"
 
@@ -159,16 +176,8 @@ for NODE in "${GPU_NODES[@]}"; do
         --output "$OUT_DIR/bench_%N_gpu.out"
         --error "$OUT_DIR/bench_%N_gpu.err"
         --export "ALL,BENCH_ROOT=$ROOT_DIR,BENCH_CONDA_ENV=$BENCH_CONDA_ENV" 
-        "$JOB_SCRIPT" --duration "$BENCH_DURATION" --repeats "$BENCH_REPEATS" )
-    if (( BENCH_VERBOSE == 1 )); then
-        sb_cmd+=( --verbose )
-    fi
-    if [[ -n "${BENCH_VRAM_FRAC:-}" ]]; then
-        sb_cmd+=( --vram-frac "$BENCH_VRAM_FRAC" )
-    fi
-    if [[ -n "${BENCH_WARMUP_STEPS:-}" ]]; then
-        sb_cmd+=( --warmup "$BENCH_WARMUP_STEPS" )
-    fi
+        "$JOB_SCRIPT" --duration "$BENCH_DURATION" --repeats "$BENCH_REPEATS" --warmup "$WARMUP_STEPS" --vram-frac "$VRAM_FRAC" )
+    (( BENCH_VERBOSE == 1 )) && sb_cmd+=( --verbose )
 
     if (( BENCH_VERBOSE == 1 )); then
         printf '[submit-gpu] CMD: '
