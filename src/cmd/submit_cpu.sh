@@ -111,6 +111,7 @@ for NODE in "${NODES[@]}"; do
 			--nodes 1
 			--ntasks-per-node 1
 			--cpus-per-task "$tot"
+			--exclusive
 			--mem=0
 			--time "$wall"
 			--output "$OUT_DIR/bench_%N_cpu.out"
