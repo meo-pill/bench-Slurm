@@ -42,6 +42,9 @@ def _adjust_size_for_vram(initial_N, total_bytes, free_bytes, arrays=4, dtype_by
     On cible min(target_frac * total, (target_frac+0.05) * free) pour ne pas
     écraser d'autres allocations résiduelles. On ne réduit jamais en-dessous d'initial_N.
     """
+    # Sélection de la fraction cible effective
+    target_frac = VRAM_TARGET_FRAC if target_frac is None else target_frac
+
     if initial_N <= 0:
         base = 1 << 18  # point de départ raisonnable si l'utilisateur force N<=0
     else:
@@ -106,6 +109,9 @@ def bench_torch(duration, device_index, N, verbose):
             else:
                 raise
 
+    # Calcul utilisé pour stats VRAM (indépendant du verbose)
+    used_bytes = 4 * 4 * xN  # 4 tableaux float32
+
     # Warmup configurable
     if WARMUP_STEPS > 0:
         for _ in range(WARMUP_STEPS):
@@ -136,7 +142,6 @@ def bench_torch(duration, device_index, N, verbose):
         print(fmt_device_info('torch', dev_name, device_index))
         if mem_info:
             free_b, total_b = mem_info
-            used_bytes = 4 * 4 * xN
             frac = used_bytes / total_b if total_b else 0.0
             print(
                 f"VRAM target={VRAM_TARGET_FRAC*100:.1f}% alloc~{frac*100:.1f}% bytes={used_bytes/1e6:.1f}MB total={total_b/1e6:.1f}MB")
@@ -158,16 +163,17 @@ def bench_torch(duration, device_index, N, verbose):
     total_flops = 6.0 * iters * xN  # 3 FMA = 6 FLOPs
     flops_per_s = total_flops / (ms / 1000.0)
     # Enregistre stats VRAM
-    try:
-        if mem_info:
+    if mem_info:
+        try:
+            free_b, total_b = mem_info
             bench_torch.last_vram = {
                 'used_bytes': used_bytes,
                 'total_bytes': total_b,
                 'N': xN,
                 'arrays': 4
             }
-    except Exception:
-        pass
+        except Exception:
+            pass
     return flops_per_s
 
 
@@ -200,6 +206,8 @@ def bench_cupy(duration, device_index, N, verbose):
                 cp.get_default_memory_pool().free_all_blocks()
             else:
                 raise
+
+    used_bytes = 4 * 4 * xN
 
     kernel = cp.ElementwiseKernel(
         in_params='float32 a, float32 b, float32 c, int32 iters',
@@ -239,7 +247,6 @@ def bench_cupy(duration, device_index, N, verbose):
         print(fmt_device_info('cupy', dev_name, device_index))
         if mem_info:
             free_b, total_b = mem_info
-            used_bytes = 4 * 4 * xN
             frac = used_bytes / total_b if total_b else 0.0
             print(
                 f"VRAM target={VRAM_TARGET_FRAC*100:.1f}% alloc~{frac*100:.1f}% bytes={used_bytes/1e6:.1f}MB total={total_b/1e6:.1f}MB")
@@ -256,16 +263,17 @@ def bench_cupy(duration, device_index, N, verbose):
 
     total_flops = 6.0 * iters * xN
     flops_per_s = total_flops / (ms / 1000.0)
-    try:
-        if mem_info:
+    if mem_info:
+        try:
+            free_b, total_b = mem_info
             bench_cupy.last_vram = {
                 'used_bytes': used_bytes,
                 'total_bytes': total_b,
                 'N': xN,
                 'arrays': 4
             }
-    except Exception:
-        pass
+        except Exception:
+            pass
     return flops_per_s
 
 
@@ -299,6 +307,8 @@ def bench_numba(duration, device_index, N, verbose):
                 xN //= 2
             else:
                 raise
+
+    used_bytes = 4 * 4 * xN
 
     @cuda.jit
     def fma_loop(a, b, c, out, iters):
@@ -352,16 +362,17 @@ def bench_numba(duration, device_index, N, verbose):
     ms = (t1 - t0) * 1000.0
     total_flops = 6.0 * iters * xN
     flops_per_s = total_flops / (ms / 1000.0)
-    try:
-        if mem_info:
+    if mem_info:
+        try:
+            free_b, total_b = mem_info
             bench_numba.last_vram = {
                 'used_bytes': used_bytes,
                 'total_bytes': total_b,
                 'N': xN,
                 'arrays': 4
             }
-    except Exception:
-        pass
+        except Exception:
+            pass
     return flops_per_s
 
 
@@ -439,6 +450,9 @@ def bench_torch_multi(duration, device_indices, N, verbose):
 
     totals = {}
     times_ms = {}
+    mem_used = {}
+    mem_total = {}
+    per_device = []
 
     def worker(idx):
         torch.cuda.set_device(idx)
@@ -471,6 +485,14 @@ def bench_torch_multi(duration, device_indices, N, verbose):
         ms = s.elapsed_time(e)
         totals[idx] = 6.0 * iters * localN
         times_ms[idx] = ms
+        # Enregistre mémoire par device
+        try:
+            mem_used[idx] = 4 * 4 * localN
+            if 't_b' in locals():
+                mem_total[idx] = t_b
+                per_device.append({'idx': idx, 'used_bytes': mem_used[idx], 'total_bytes': t_b, 'N': localN})
+        except Exception:
+            pass
         if verbose:
             used_bytes = 4*4*localN
             frac = used_bytes / t_b if 't_b' in locals() and t_b else 0.0
@@ -491,13 +513,18 @@ def bench_torch_multi(duration, device_indices, N, verbose):
 
     total_flops = sum(totals.values())
     max_time = max(times_ms.values())/1000.0
-    # VRAM multi (somme des used / total si dispo)
-    try:
-        used_sum = sum(v for v in locals().get('totals_used', {}
-                                               ).values()) if 'totals_used' in locals() else None
-    except Exception:
-        used_sum = None
-    # Collect inside worker? adjust worker to record used and total
+    # Agrégation VRAM
+    if mem_used:
+        try:
+            bench_torch_multi.last_vram = {
+                'used_bytes_sum': sum(mem_used.values()),
+                'total_bytes_sum': sum(mem_total.values()) if mem_total else None,
+                'devices': device_indices,
+                'iters': iters,
+                'per_device': per_device
+            }
+        except Exception:
+            pass
     return total_flops / max_time
 
 
@@ -541,6 +568,9 @@ def bench_cupy_multi(duration, device_indices, N, verbose):
 
     totals = {}
     times_ms = {}
+    mem_used = {}
+    mem_total = {}
+    per_device = []
 
     def worker(idx):
         dev = cp.cuda.Device(idx)
@@ -566,6 +596,13 @@ def bench_cupy_multi(duration, device_indices, N, verbose):
         e.synchronize()
         times_ms[idx] = cp.cuda.get_elapsed_time(s, e)
         totals[idx] = 6.0 * iters * localN
+        try:
+            mem_used[idx] = 4 * 4 * localN
+            if 't_b' in locals():
+                mem_total[idx] = t_b
+                per_device.append({'idx': idx, 'used_bytes': mem_used[idx], 'total_bytes': t_b, 'N': localN})
+        except Exception:
+            pass
         if verbose:
             used_bytes = 4*4*localN
             frac = used_bytes / t_b if 't_b' in locals() and t_b else 0.0
@@ -587,4 +624,15 @@ def bench_cupy_multi(duration, device_indices, N, verbose):
 
     total_flops = sum(totals.values())
     max_time = max(times_ms.values())/1000.0
+    if mem_used:
+        try:
+            bench_cupy_multi.last_vram = {
+                'used_bytes_sum': sum(mem_used.values()),
+                'total_bytes_sum': sum(mem_total.values()) if mem_total else None,
+                'devices': device_indices,
+                'iters': iters,
+                'per_device': per_device
+            }
+        except Exception:
+            pass
     return total_flops / max_time

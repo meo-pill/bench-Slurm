@@ -112,7 +112,7 @@ def main():
 
     # Nouveau format (aligné sur le CPU) mais avec backend séparé et colonnes VRAM
     # En-tête: node,backend,mode,nb_gpu,runs,duration_s,avg_events_per_s,stddev_events_per_s,min_events_per_s,max_events_per_s,vram_total_MB,vram_used_MB,vram_used_pct,timestamp
-    gpu_header = 'node,backend,mode,nb_gpu,runs,duration_s,avg_events_per_s,stddev_events_per_s,min_events_per_s,max_events_per_s,vram_total_MB,vram_used_MB,vram_used_pct,timestamp'
+    gpu_header = 'node,backend,mode,nb_gpu,runs,duration_s,avg_events_per_s,stddev_events_per_s,min_events_per_s,max_events_per_s,vram_total_MB,vram_used_MB,vram_used_pct,heterogeneous,timestamp'
     gpu_csv_path = os.path.join(csv_dir, f"gpu_{args.node}.csv")
 
     def ensure_gpu_header():
@@ -134,15 +134,20 @@ def main():
 
     def write_gpu_line(backend: str, mode: str, threads: int, runs: int, duration: float,
                        avg: float, std: float, vmin: float, vmax: float,
-                       vram_total: float | None, vram_used: float | None, vram_pct: float | None):
+                       vram_total: float | None, vram_used: float | None, vram_pct: float | None,
+                       heterogeneous: int | None):
         ts = datetime.now().isoformat(timespec='seconds')
 
         def fmt(x):
             if x is None:
                 return ''
             return f"{x:.3f}"
+        def fmt_int(x):
+            if x is None:
+                return ''
+            return str(int(x))
         line = (
-            f"{args.node},{backend},{mode},{threads},{runs},{duration:.3f},{avg:.3f},{std:.3f},{vmin:.3f},{vmax:.3f},{fmt(vram_total)},{fmt(vram_used)},{fmt(vram_pct)},{ts}\n"
+            f"{args.node},{backend},{mode},{threads},{runs},{duration:.3f},{avg:.3f},{std:.3f},{vmin:.3f},{vmax:.3f},{fmt(vram_total)},{fmt(vram_used)},{fmt(vram_pct)},{fmt_int(heterogeneous)},{ts}\n"
         )
         with open(gpu_csv_path, 'a') as f:
             f.write(line)
@@ -187,7 +192,7 @@ def main():
                     vram_used = used/1e6
                     vram_pct = (used/total*100.0) if total else 0.0
                 write_gpu_line('torch', 'mono', 1, len(
-                    vals), args.duration, avg, std, vmin, vmax, vram_total, vram_used, vram_pct)
+                    vals), args.duration, avg, std, vmin, vmax, vram_total, vram_used, vram_pct, 0)
                 printed += 1
                 any_ok = True
                 # Multi-GPU
@@ -210,6 +215,7 @@ def main():
                                args.duration, avg, std, len(vals))
                 # VRAM multi torch
                 vram_total = vram_used = vram_pct = None
+                hetero_flag = 0
                 if threads_count > 1:
                     vinfo_m = getattr(bench_torch_multi, 'last_vram', None)
                     if vinfo_m:
@@ -219,6 +225,11 @@ def main():
                         vram_used = used_sum/1e6
                         vram_pct = (used_sum/total_sum *
                                     100.0) if total_sum else 0.0
+                        per_dev = vinfo_m.get('per_device') or []
+                        if per_dev:
+                            totals = {d.get('total_bytes') for d in per_dev if d.get('total_bytes')}
+                            if len(totals) > 1:
+                                hetero_flag = 1
                 else:
                     vinfo = getattr(bench_torch, 'last_vram', None)
                     if vinfo:
@@ -228,7 +239,7 @@ def main():
                         vram_used = used/1e6
                         vram_pct = (used/total*100.0) if total else 0.0
                 write_gpu_line('torch', 'multi', threads_count, len(
-                    vals), args.duration, avg, std, vmin, vmax, vram_total, vram_used, vram_pct)
+                    vals), args.duration, avg, std, vmin, vmax, vram_total, vram_used, vram_pct, hetero_flag)
                 printed += 1
                 any_ok = True
             elif be == 'cupy':
@@ -252,7 +263,7 @@ def main():
                     vram_used = used/1e6
                     vram_pct = (used/total*100.0) if total else 0.0
                 write_gpu_line('cupy', 'mono', 1, len(
-                    vals), args.duration, avg, std, vmin, vmax, vram_total, vram_used, vram_pct)
+                    vals), args.duration, avg, std, vmin, vmax, vram_total, vram_used, vram_pct, 0)
                 printed += 1
                 any_ok = True
                 # Multi-GPU
@@ -274,6 +285,7 @@ def main():
                 display_result(be, 'multi', threads_count,
                                args.duration, avg, std, len(vals))
                 vram_total = vram_used = vram_pct = None
+                hetero_flag = 0
                 if threads_count > 1:
                     vinfo_m = getattr(bench_cupy_multi, 'last_vram', None)
                     if vinfo_m:
@@ -283,6 +295,11 @@ def main():
                         vram_used = used_sum/1e6
                         vram_pct = (used_sum/total_sum *
                                     100.0) if total_sum else 0.0
+                        per_dev = vinfo_m.get('per_device') or []
+                        if per_dev:
+                            totals = {d.get('total_bytes') for d in per_dev if d.get('total_bytes')}
+                            if len(totals) > 1:
+                                hetero_flag = 1
                 else:
                     vinfo = getattr(bench_cupy, 'last_vram', None)
                     if vinfo:
@@ -292,7 +309,7 @@ def main():
                         vram_used = used/1e6
                         vram_pct = (used/total*100.0) if total else 0.0
                 write_gpu_line('cupy', 'multi', threads_count, len(
-                    vals), args.duration, avg, std, vmin, vmax, vram_total, vram_used, vram_pct)
+                    vals), args.duration, avg, std, vmin, vmax, vram_total, vram_used, vram_pct, hetero_flag)
                 printed += 1
                 any_ok = True
             elif be == 'numba':
@@ -316,7 +333,7 @@ def main():
                     vram_used = used/1e6
                     vram_pct = (used/total*100.0) if total else 0.0
                 write_gpu_line('numba', 'mono', 1, len(
-                    vals), args.duration, avg, std, vmin, vmax, vram_total, vram_used, vram_pct)
+                    vals), args.duration, avg, std, vmin, vmax, vram_total, vram_used, vram_pct, 0)
                 printed += 1
                 any_ok = True
                 # Multi-GPU (fallback séquentiel)
@@ -357,8 +374,9 @@ def main():
                         vram_total = total/1e6
                         vram_used = used/1e6
                         vram_pct = (used/total*100.0) if total else 0.0
+                # Fallback numba: pas de per-device détaillé -> flag 0 (ou vide). Ici 0.
                 write_gpu_line('numba', 'multi', threads_count, len(
-                    vals), args.duration, avg, std, vmin, vmax, vram_total, vram_used, vram_pct)
+                    vals), args.duration, avg, std, vmin, vmax, vram_total, vram_used, vram_pct, 0)
                 printed += 1
                 any_ok = True
 
