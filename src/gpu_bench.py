@@ -43,6 +43,7 @@ def display_result(backend: str, mode: str, threads: int, duration: float, avg: 
     print(f'STD {std:.3f}')
     print(f'RUNS {runs}')
 
+
 def ensure_conda_active(expected_name: str | None = None) -> None:
     """Vérifie qu'un environnement conda est actif, sinon bloque l'exécution.
 
@@ -62,28 +63,38 @@ def ensure_conda_active(expected_name: str | None = None) -> None:
             ok = True
         if not ok:
             cur = env or prefix or '(inconnu)'
-            print(f"[error] L'environnement conda actif ('{cur}') ne correspond pas à l'environnement requis '{expected_name}'.", file=sys.stderr)
+            print(
+                f"[error] L'environnement conda actif ('{cur}') ne correspond pas à l'environnement requis '{expected_name}'.", file=sys.stderr)
             sys.exit(3)
 
 
 def main():
-    p = argparse.ArgumentParser(description='GPU compute benchmark (Python). Exécute toujours mono et multi pour chaque backend disponible.')
-    p.add_argument('--duration', type=float, default=3.0, help='durée cible en secondes')
-    p.add_argument('--size', type=int, default=1<<23, help='taille du vecteur (peut être réduit si OOM)')
-    p.add_argument('--repeats', type=int, default=5, help='nombre de répétitions pour moyenne/écart-type')
+    p = argparse.ArgumentParser(
+        description='GPU compute benchmark (Python). Exécute toujours mono et multi pour chaque backend disponible.')
+    p.add_argument('--duration', type=float, default=3.0,
+                   help='durée cible en secondes')
+    p.add_argument('--size', type=int, default=1 << 23,
+                   help='taille du vecteur (peut être réduit si OOM)')
+    p.add_argument('--repeats', type=int, default=5,
+                   help='nombre de répétitions pour moyenne/écart-type')
     p.add_argument('--verbose', action='store_true')
-    p.add_argument('--conda-env', type=str, default=None, help="nom de l'environnement conda requis (obligatoire: un conda actif doit être présent)")
+    p.add_argument('--conda-env', type=str, default=None,
+                   help="nom de l'environnement conda requis (obligatoire: un conda actif doit être présent)")
     # outputs sous la racine du projet (parent de src)
-    p.add_argument('--csv-dir', type=str, default=os.path.join(os.path.dirname(os.path.dirname(__file__)), 'outputs'), help='répertoire pour stocker le CSV consolidé')
-    p.add_argument('--node', type=str, default=socket.gethostname().split('.')[0], help='nom du nœud pour les CSV')
-    p.add_argument('--vram-frac', type=float, default=None, help='fraction VRAM cible (0.05-0.95) pour ajuster la taille des buffers GPU')
-    p.add_argument('--warmup', type=int, default=None, help='override du nombre d\'itérations de warmup (0..50)')
+    p.add_argument('--csv-dir', type=str, default=os.path.join(os.path.dirname(
+        os.path.dirname(__file__)), 'outputs'), help='répertoire pour stocker le CSV consolidé')
+    p.add_argument('--node', type=str, default=socket.gethostname().split('.')
+                   [0], help='nom du nœud pour les CSV')
+    p.add_argument('--vram-frac', type=float, default=None,
+                   help='fraction VRAM cible (0.05-0.95) pour ajuster la taille des buffers GPU')
+    p.add_argument('--warmup', type=int, default=None,
+                   help='override du nombre d\'itérations de warmup (0..50)')
     args = p.parse_args()
 
     # Vérifie conda actif et (optionnellement) le nom d'env requis
     ensure_conda_active(args.conda_env)
 
-    backends = ['torch','cupy','numba']
+    backends = ['torch', 'cupy', 'numba']
 
     # Override VRAM target if requested
     if args.vram_frac is not None:
@@ -159,7 +170,7 @@ def main():
 
     last_err = None
     any_ok = False
-    aggregate = { 'runs': args.repeats, 'duration_s': args.duration }
+    aggregate = {'runs': args.repeats, 'duration_s': args.duration}
     for be in backends:
         try:
             printed = 0
@@ -170,9 +181,11 @@ def main():
                     s1 = bench_torch(args.duration, 0, args.size, args.verbose)
                     vals.append(s1)
                     if args.verbose:
-                        print(f"[torch mono] run {i+1}/{args.repeats}: {s1:.3f}")
+                        print(
+                            f"[torch mono] run {i+1}/{args.repeats}: {s1:.3f}")
                 avg, std, vmin, vmax = calc_stats(vals)
-                display_result(be, 'mono', 1, args.duration, avg, std, len(vals))
+                display_result(be, 'mono', 1, args.duration,
+                               avg, std, len(vals))
                 aggregate['torch_mono_avg'] = avg
                 aggregate['torch_mono_std'] = std
                 aggregate['torch_mono_min'] = vmin
@@ -182,7 +195,8 @@ def main():
                 if vinfo:
                     aggregate['torch_mono_vram_total_MB'] = vinfo['total_bytes']/1e6
                     aggregate['torch_mono_vram_used_MB'] = vinfo['used_bytes']/1e6
-                    aggregate['torch_mono_vram_used_pct'] = (vinfo['used_bytes']/vinfo['total_bytes']*100.0) if vinfo['total_bytes'] else 0.0
+                    aggregate['torch_mono_vram_used_pct'] = (
+                        vinfo['used_bytes']/vinfo['total_bytes']*100.0) if vinfo['total_bytes'] else 0.0
                 printed += 1
                 any_ok = True
                 # Multi-GPU
@@ -191,14 +205,18 @@ def main():
                 vals = []
                 for i in range(args.repeats):
                     if len(devs) > 1:
-                        s = bench_torch_multi(args.duration, devs, args.size, args.verbose)
+                        s = bench_torch_multi(
+                            args.duration, devs, args.size, args.verbose)
                     else:
-                        s = bench_torch(args.duration, 0, args.size, args.verbose)
+                        s = bench_torch(args.duration, 0,
+                                        args.size, args.verbose)
                     vals.append(s)
                     if args.verbose:
-                        print(f"[torch multi] run {i+1}/{args.repeats}: {s:.3f}")
+                        print(
+                            f"[torch multi] run {i+1}/{args.repeats}: {s:.3f}")
                 avg, std, vmin, vmax = calc_stats(vals)
-                display_result(be, 'multi', threads_count, args.duration, avg, std, len(vals))
+                display_result(be, 'multi', threads_count,
+                               args.duration, avg, std, len(vals))
                 aggregate['torch_multi_avg'] = avg
                 aggregate['torch_multi_std'] = std
                 aggregate['torch_multi_min'] = vmin
@@ -212,14 +230,16 @@ def main():
                         used_sum = vinfo_m.get('used_bytes_sum') or 0
                         aggregate['torch_multi_vram_total_MB_sum'] = total_sum/1e6
                         aggregate['torch_multi_vram_used_MB_sum'] = used_sum/1e6
-                        aggregate['torch_multi_vram_used_pct'] = (used_sum/total_sum*100.0) if total_sum else 0.0
+                        aggregate['torch_multi_vram_used_pct'] = (
+                            used_sum/total_sum*100.0) if total_sum else 0.0
                 else:
                     # fallback répète mono
                     vinfo = getattr(bench_torch, 'last_vram', None)
                     if vinfo:
                         aggregate['torch_multi_vram_total_MB_sum'] = vinfo['total_bytes']/1e6
                         aggregate['torch_multi_vram_used_MB_sum'] = vinfo['used_bytes']/1e6
-                        aggregate['torch_multi_vram_used_pct'] = (vinfo['used_bytes']/vinfo['total_bytes']*100.0) if vinfo['total_bytes'] else 0.0
+                        aggregate['torch_multi_vram_used_pct'] = (
+                            vinfo['used_bytes']/vinfo['total_bytes']*100.0) if vinfo['total_bytes'] else 0.0
                 printed += 1
                 any_ok = True
             elif be == 'cupy':
@@ -229,9 +249,11 @@ def main():
                     s1 = bench_cupy(args.duration, 0, args.size, args.verbose)
                     vals.append(s1)
                     if args.verbose:
-                        print(f"[cupy mono] run {i+1}/{args.repeats}: {s1:.3f}")
+                        print(
+                            f"[cupy mono] run {i+1}/{args.repeats}: {s1:.3f}")
                 avg, std, vmin, vmax = calc_stats(vals)
-                display_result(be, 'mono', 1, args.duration, avg, std, len(vals))
+                display_result(be, 'mono', 1, args.duration,
+                               avg, std, len(vals))
                 aggregate['cupy_mono_avg'] = avg
                 aggregate['cupy_mono_std'] = std
                 aggregate['cupy_mono_min'] = vmin
@@ -240,7 +262,8 @@ def main():
                 if vinfo:
                     aggregate['cupy_mono_vram_total_MB'] = vinfo['total_bytes']/1e6
                     aggregate['cupy_mono_vram_used_MB'] = vinfo['used_bytes']/1e6
-                    aggregate['cupy_mono_vram_used_pct'] = (vinfo['used_bytes']/vinfo['total_bytes']*100.0) if vinfo['total_bytes'] else 0.0
+                    aggregate['cupy_mono_vram_used_pct'] = (
+                        vinfo['used_bytes']/vinfo['total_bytes']*100.0) if vinfo['total_bytes'] else 0.0
                 printed += 1
                 any_ok = True
                 # Multi-GPU
@@ -249,14 +272,18 @@ def main():
                 vals = []
                 for i in range(args.repeats):
                     if len(devs) > 1:
-                        s = bench_cupy_multi(args.duration, devs, args.size, args.verbose)
+                        s = bench_cupy_multi(
+                            args.duration, devs, args.size, args.verbose)
                     else:
-                        s = bench_cupy(args.duration, 0, args.size, args.verbose)
+                        s = bench_cupy(args.duration, 0,
+                                       args.size, args.verbose)
                     vals.append(s)
                     if args.verbose:
-                        print(f"[cupy multi] run {i+1}/{args.repeats}: {s:.3f}")
+                        print(
+                            f"[cupy multi] run {i+1}/{args.repeats}: {s:.3f}")
                 avg, std, vmin, vmax = calc_stats(vals)
-                display_result(be, 'multi', threads_count, args.duration, avg, std, len(vals))
+                display_result(be, 'multi', threads_count,
+                               args.duration, avg, std, len(vals))
                 aggregate['cupy_multi_avg'] = avg
                 aggregate['cupy_multi_std'] = std
                 aggregate['cupy_multi_min'] = vmin
@@ -269,13 +296,15 @@ def main():
                         used_sum = vinfo_m.get('used_bytes_sum') or 0
                         aggregate['cupy_multi_vram_total_MB_sum'] = total_sum/1e6
                         aggregate['cupy_multi_vram_used_MB_sum'] = used_sum/1e6
-                        aggregate['cupy_multi_vram_used_pct'] = (used_sum/total_sum*100.0) if total_sum else 0.0
+                        aggregate['cupy_multi_vram_used_pct'] = (
+                            used_sum/total_sum*100.0) if total_sum else 0.0
                 else:
                     vinfo = getattr(bench_cupy, 'last_vram', None)
                     if vinfo:
                         aggregate['cupy_multi_vram_total_MB_sum'] = vinfo['total_bytes']/1e6
                         aggregate['cupy_multi_vram_used_MB_sum'] = vinfo['used_bytes']/1e6
-                        aggregate['cupy_multi_vram_used_pct'] = (vinfo['used_bytes']/vinfo['total_bytes']*100.0) if vinfo['total_bytes'] else 0.0
+                        aggregate['cupy_multi_vram_used_pct'] = (
+                            vinfo['used_bytes']/vinfo['total_bytes']*100.0) if vinfo['total_bytes'] else 0.0
                 printed += 1
                 any_ok = True
             elif be == 'numba':
@@ -285,9 +314,11 @@ def main():
                     s1 = bench_numba(args.duration, 0, args.size, args.verbose)
                     vals.append(s1)
                     if args.verbose:
-                        print(f"[numba mono] run {i+1}/{args.repeats}: {s1:.3f}")
+                        print(
+                            f"[numba mono] run {i+1}/{args.repeats}: {s1:.3f}")
                 avg, std, vmin, vmax = calc_stats(vals)
-                display_result(be, 'mono', 1, args.duration, avg, std, len(vals))
+                display_result(be, 'mono', 1, args.duration,
+                               avg, std, len(vals))
                 aggregate['numba_mono_avg'] = avg
                 aggregate['numba_mono_std'] = std
                 aggregate['numba_mono_min'] = vmin
@@ -296,7 +327,8 @@ def main():
                 if vinfo:
                     aggregate['numba_mono_vram_total_MB'] = vinfo['total_bytes']/1e6
                     aggregate['numba_mono_vram_used_MB'] = vinfo['used_bytes']/1e6
-                    aggregate['numba_mono_vram_used_pct'] = (vinfo['used_bytes']/vinfo['total_bytes']*100.0) if vinfo['total_bytes'] else 0.0
+                    aggregate['numba_mono_vram_used_pct'] = (
+                        vinfo['used_bytes']/vinfo['total_bytes']*100.0) if vinfo['total_bytes'] else 0.0
                 printed += 1
                 any_ok = True
                 # Multi-GPU (fallback séquentiel)
@@ -307,14 +339,18 @@ def main():
                     if len(devs) > 1:
                         s = 0.0
                         for d in devs:
-                            s += bench_numba(args.duration, d, args.size, args.verbose)
+                            s += bench_numba(args.duration, d,
+                                             args.size, args.verbose)
                     else:
-                        s = bench_numba(args.duration, 0, args.size, args.verbose)
+                        s = bench_numba(args.duration, 0,
+                                        args.size, args.verbose)
                     vals.append(s)
                     if args.verbose:
-                        print(f"[numba multi] run {i+1}/{args.repeats}: {s:.3f}")
+                        print(
+                            f"[numba multi] run {i+1}/{args.repeats}: {s:.3f}")
                 avg, std, vmin, vmax = calc_stats(vals)
-                display_result(be, 'multi', threads_count, args.duration, avg, std, len(vals))
+                display_result(be, 'multi', threads_count,
+                               args.duration, avg, std, len(vals))
                 aggregate['numba_multi_avg'] = avg
                 aggregate['numba_multi_std'] = std
                 aggregate['numba_multi_min'] = vmin
@@ -330,17 +366,19 @@ def main():
                         used_sum = vinfo['used_bytes']
                     aggregate['numba_multi_vram_total_MB_sum'] = total_sum/1e6
                     aggregate['numba_multi_vram_used_MB_sum'] = used_sum/1e6
-                    aggregate['numba_multi_vram_used_pct'] = (used_sum/total_sum*100.0) if total_sum else 0.0
+                    aggregate['numba_multi_vram_used_pct'] = (
+                        used_sum/total_sum*100.0) if total_sum else 0.0
                 printed += 1
                 any_ok = True
-            
+
             else:
                 raise RuntimeError('backend inconnu')
 
         except Exception as e:
             last_err = e
             if args.verbose:
-                print(f"[warn] backend {be} indisponible/échec: {e}", file=sys.stderr)
+                print(
+                    f"[warn] backend {be} indisponible/échec: {e}", file=sys.stderr)
             continue
 
     if any_ok:

@@ -12,8 +12,10 @@ import os
 _DEF_VRAM_TARGET = 0.80
 # Warmup par défaut (nombre d'itérations "froides" non mesurées)
 _DEF_WARMUP_STEPS = 5
-VRAM_TARGET_FRAC = _DEF_VRAM_TARGET  # Valeur définie uniquement par argument (set_vram_target)
+# Valeur définie uniquement par argument (set_vram_target)
+VRAM_TARGET_FRAC = _DEF_VRAM_TARGET
 WARMUP_STEPS = _DEF_WARMUP_STEPS     # Idem (set_warmup_steps)
+
 
 def set_warmup_steps(n: int):
     """Override programmatique du nombre d'itérations de warmup (0..50).
@@ -47,13 +49,15 @@ def _adjust_size_for_vram(initial_N, total_bytes, free_bytes, arrays=4, dtype_by
     bytes_per_set = arrays * dtype_bytes
     if total_bytes <= 0 or free_bytes <= 0:
         return base
-    target_bytes = min(target_frac * total_bytes, (target_frac + 0.05) * free_bytes)
+    target_bytes = min(target_frac * total_bytes,
+                       (target_frac + 0.05) * free_bytes)
     if target_bytes <= 0:
         return base
     n_target = int(target_bytes // bytes_per_set)
     if n_target < base:
         return base
     return n_target
+
 
 def set_vram_target(frac: float):
     """Permet de surcharger dynamiquement la fraction cible VRAM (0.05..0.95).
@@ -96,7 +100,7 @@ def bench_torch(duration, device_index, N, verbose):
             out = torch.empty_like(a)
             break
         except RuntimeError as e:
-            if 'out of memory' in str(e).lower() and xN > (1<<18):
+            if 'out of memory' in str(e).lower() and xN > (1 << 18):
                 xN //= 2
                 torch.cuda.empty_cache()
             else:
@@ -119,7 +123,8 @@ def bench_torch(duration, device_index, N, verbose):
         out = torch.addcmul(c, a, b)
         out = torch.addcmul(out, b, a)
         out = torch.addcmul(out, a, out)
-    stop_evt.record(); stop_evt.synchronize()
+    stop_evt.record()
+    stop_evt.synchronize()
     ms = start_evt.elapsed_time(stop_evt)
     secs = ms / 1000.0
     if secs > 0:
@@ -133,8 +138,10 @@ def bench_torch(duration, device_index, N, verbose):
             free_b, total_b = mem_info
             used_bytes = 4 * 4 * xN
             frac = used_bytes / total_b if total_b else 0.0
-            print(f"VRAM target={VRAM_TARGET_FRAC*100:.1f}% alloc~{frac*100:.1f}% bytes={used_bytes/1e6:.1f}MB total={total_b/1e6:.1f}MB")
-        print(f"WARMUP {WARMUP_STEPS} PARAM N {xN} ITERS {iters} TARGET {duration:.3f}s")
+            print(
+                f"VRAM target={VRAM_TARGET_FRAC*100:.1f}% alloc~{frac*100:.1f}% bytes={used_bytes/1e6:.1f}MB total={total_b/1e6:.1f}MB")
+        print(
+            f"WARMUP {WARMUP_STEPS} PARAM N {xN} ITERS {iters} TARGET {duration:.3f}s")
 
     # Measure
     start_evt = torch.cuda.Event(enable_timing=True)
@@ -144,7 +151,8 @@ def bench_torch(duration, device_index, N, verbose):
         out = torch.addcmul(c, a, b)
         out = torch.addcmul(out, b, a)
         out = torch.addcmul(out, a, out)
-    stop_evt.record(); stop_evt.synchronize()
+    stop_evt.record()
+    stop_evt.synchronize()
     ms = start_evt.elapsed_time(stop_evt)
 
     total_flops = 6.0 * iters * xN  # 3 FMA = 6 FLOPs
@@ -167,7 +175,8 @@ def bench_cupy(duration, device_index, N, verbose):
     import cupy as cp
     dev = cp.cuda.Device(device_index)
     dev.use()
-    dev_name = dev.attributes.get('Name') or cp.cuda.runtime.getDeviceProperties(device_index)['name'].decode()
+    dev_name = dev.attributes.get('Name') or cp.cuda.runtime.getDeviceProperties(
+        device_index)['name'].decode()
 
     # Try allocate; downscale if OOM
     mem_info = None
@@ -186,7 +195,7 @@ def bench_cupy(duration, device_index, N, verbose):
             out = cp.empty_like(a)
             break
         except cp.cuda.memory.OutOfMemoryError:
-            if xN > (1<<18):
+            if xN > (1 << 18):
                 xN //= 2
                 cp.get_default_memory_pool().free_all_blocks()
             else:
@@ -213,8 +222,12 @@ def bench_cupy(duration, device_index, N, verbose):
 
     # Calibrate
     iters = 256
-    start = cp.cuda.Event(); end = cp.cuda.Event()
-    start.record(); kernel(a, b, c, iters, out); end.record(); end.synchronize()
+    start = cp.cuda.Event()
+    end = cp.cuda.Event()
+    start.record()
+    kernel(a, b, c, iters, out)
+    end.record()
+    end.synchronize()
     ms = cp.cuda.get_elapsed_time(start, end)
     secs = ms / 1000.0
     if secs > 0:
@@ -228,11 +241,17 @@ def bench_cupy(duration, device_index, N, verbose):
             free_b, total_b = mem_info
             used_bytes = 4 * 4 * xN
             frac = used_bytes / total_b if total_b else 0.0
-            print(f"VRAM target={VRAM_TARGET_FRAC*100:.1f}% alloc~{frac*100:.1f}% bytes={used_bytes/1e6:.1f}MB total={total_b/1e6:.1f}MB")
-        print(f"WARMUP {WARMUP_STEPS} PARAM N {xN} ITERS {iters} TARGET {duration:.3f}s")
+            print(
+                f"VRAM target={VRAM_TARGET_FRAC*100:.1f}% alloc~{frac*100:.1f}% bytes={used_bytes/1e6:.1f}MB total={total_b/1e6:.1f}MB")
+        print(
+            f"WARMUP {WARMUP_STEPS} PARAM N {xN} ITERS {iters} TARGET {duration:.3f}s")
 
-    start = cp.cuda.Event(); end = cp.cuda.Event()
-    start.record(); kernel(a, b, c, iters, out); end.record(); end.synchronize()
+    start = cp.cuda.Event()
+    end = cp.cuda.Event()
+    start.record()
+    kernel(a, b, c, iters, out)
+    end.record()
+    end.synchronize()
     ms = cp.cuda.get_elapsed_time(start, end)
 
     total_flops = 6.0 * iters * xN
@@ -276,7 +295,7 @@ def bench_numba(duration, device_index, N, verbose):
             d_out = cuda.device_array_like(d_a)
             break
         except cuda.cudadrv.driver.CudaAPIError:
-            if xN > (1<<18):
+            if xN > (1 << 18):
                 xN //= 2
             else:
                 raise
@@ -286,7 +305,9 @@ def bench_numba(duration, device_index, N, verbose):
         i = cuda.grid(1)
         if i >= a.size:
             return
-        x = a[i]; y = b[i]; z = c[i]
+        x = a[i]
+        y = b[i]
+        z = c[i]
         for _ in range(iters):
             x = x*y + z
             y = y*z + x
@@ -303,7 +324,10 @@ def bench_numba(duration, device_index, N, verbose):
 
     iters = 256
     import time as _t
-    t0 = _t.perf_counter(); fma_loop[blocks, threads](d_a, d_b, d_c, d_out, iters); cuda.synchronize(); t1 = _t.perf_counter()
+    t0 = _t.perf_counter()
+    fma_loop[blocks, threads](d_a, d_b, d_c, d_out, iters)
+    cuda.synchronize()
+    t1 = _t.perf_counter()
     secs = t1 - t0
     if secs > 0:
         scale = duration / secs
@@ -316,10 +340,15 @@ def bench_numba(duration, device_index, N, verbose):
             free_b, total_b = mem_info
             used_bytes = 4 * 4 * xN
             frac = used_bytes / total_b if total_b else 0.0
-            print(f"VRAM target={VRAM_TARGET_FRAC*100:.1f}% alloc~{frac*100:.1f}% bytes={used_bytes/1e6:.1f}MB total={total_b/1e6:.1f}MB")
-        print(f"WARMUP {WARMUP_STEPS} PARAM N {xN} ITERS {iters} TARGET {duration:.3f}s")
+            print(
+                f"VRAM target={VRAM_TARGET_FRAC*100:.1f}% alloc~{frac*100:.1f}% bytes={used_bytes/1e6:.1f}MB total={total_b/1e6:.1f}MB")
+        print(
+            f"WARMUP {WARMUP_STEPS} PARAM N {xN} ITERS {iters} TARGET {duration:.3f}s")
 
-    t0 = _t.perf_counter(); fma_loop[blocks, threads](d_a, d_b, d_c, d_out, iters); cuda.synchronize(); t1 = _t.perf_counter()
+    t0 = _t.perf_counter()
+    fma_loop[blocks, threads](d_a, d_b, d_c, d_out, iters)
+    cuda.synchronize()
+    t1 = _t.perf_counter()
     ms = (t1 - t0) * 1000.0
     total_flops = 6.0 * iters * xN
     flops_per_s = total_flops / (ms / 1000.0)
@@ -334,7 +363,6 @@ def bench_numba(duration, device_index, N, verbose):
     except Exception:
         pass
     return flops_per_s
-
 
 
 def list_devices_torch():
@@ -393,22 +421,25 @@ def bench_torch_multi(duration, device_indices, N, verbose):
         torch.cuda.synchronize()
     # Calibrage
     iters = 256
-    s = torch.cuda.Event(True); e = torch.cuda.Event(True)
+    s = torch.cuda.Event(True)
+    e = torch.cuda.Event(True)
     s.record()
     for _ in range(iters):
         out = torch.addcmul(c, a, b)
         out = torch.addcmul(out, b, a)
         out = torch.addcmul(out, a, out)
-    e.record(); e.synchronize()
+    e.record()
+    e.synchronize()
     ms = s.elapsed_time(e)
     secs = ms/1000.0
-    if secs>0:
+    if secs > 0:
         scale = duration/secs
-        scale = min(max(scale,0.5),64.0)
-        iters = max(int(iters*scale),1)
+        scale = min(max(scale, 0.5), 64.0)
+        iters = max(int(iters*scale), 1)
 
     totals = {}
     times_ms = {}
+
     def worker(idx):
         torch.cuda.set_device(idx)
         # Ajuster N pour chaque device (indépendant)
@@ -428,34 +459,42 @@ def bench_torch_multi(duration, device_indices, N, verbose):
                 out = torch.addcmul(out, b, a)
                 out = torch.addcmul(out, a, out)
             torch.cuda.synchronize()
-        s = torch.cuda.Event(True); e = torch.cuda.Event(True)
+        s = torch.cuda.Event(True)
+        e = torch.cuda.Event(True)
         s.record()
         for _ in range(iters):
             out = torch.addcmul(c, a, b)
             out = torch.addcmul(out, b, a)
             out = torch.addcmul(out, a, out)
-        e.record(); e.synchronize()
+        e.record()
+        e.synchronize()
         ms = s.elapsed_time(e)
         totals[idx] = 6.0 * iters * localN
         times_ms[idx] = ms
         if verbose:
             used_bytes = 4*4*localN
             frac = used_bytes / t_b if 't_b' in locals() and t_b else 0.0
-            print(f"torch dev{idx} multi VRAM target={VRAM_TARGET_FRAC*100:.1f}% alloc~{frac*100:.1f}% N={localN}")
+            print(
+                f"torch dev{idx} multi VRAM target={VRAM_TARGET_FRAC*100:.1f}% alloc~{frac*100:.1f}% N={localN}")
 
-    threads = [threading.Thread(target=worker, args=(i,)) for i in device_indices]
-    for t in threads: t.start()
-    for t in threads: t.join()
+    threads = [threading.Thread(target=worker, args=(i,))
+               for i in device_indices]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join()
 
     if verbose:
         names = [torch.cuda.get_device_name(i) for i in device_indices]
-        print(f"BACKEND torch DEVICES {device_indices} NAMES {names} WARMUP {WARMUP_STEPS} ITERS {iters} TARGET {duration:.3f}s")
+        print(
+            f"BACKEND torch DEVICES {device_indices} NAMES {names} WARMUP {WARMUP_STEPS} ITERS {iters} TARGET {duration:.3f}s")
 
     total_flops = sum(totals.values())
     max_time = max(times_ms.values())/1000.0
     # VRAM multi (somme des used / total si dispo)
     try:
-        used_sum = sum(v for v in locals().get('totals_used', {}).values()) if 'totals_used' in locals() else None
+        used_sum = sum(v for v in locals().get('totals_used', {}
+                                               ).values()) if 'totals_used' in locals() else None
     except Exception:
         used_sum = None
     # Collect inside worker? adjust worker to record used and total
@@ -466,7 +505,8 @@ def bench_cupy_multi(duration, device_indices, N, verbose):
     import cupy as cp
     if not device_indices:
         raise RuntimeError("Aucun GPU cupy")
-    dev0 = cp.cuda.Device(device_indices[0]); dev0.use()
+    dev0 = cp.cuda.Device(device_indices[0])
+    dev0.use()
     try:
         free_b, total_b = cp.cuda.runtime.memGetInfo()
         xN = _adjust_size_for_vram(N, total_b, free_b)
@@ -478,26 +518,33 @@ def bench_cupy_multi(duration, device_indices, N, verbose):
     c = cp.random.rand(xN, dtype=cp.float32)
     out = cp.empty_like(a)
     kernel = cp.ElementwiseKernel(
-        'float32 a,float32 b,float32 c,int32 iters','float32 out',
-        'float x=a,y=b,z=c; for(int i=0;i<iters;++i){x=fmaf(x,y,z); y=fmaf(y,z,x); z=fmaf(z,x,y);} out=x+y+z;','fma_loop')
+        'float32 a,float32 b,float32 c,int32 iters', 'float32 out',
+        'float x=a,y=b,z=c; for(int i=0;i<iters;++i){x=fmaf(x,y,z); y=fmaf(y,z,x); z=fmaf(z,x,y);} out=x+y+z;', 'fma_loop')
     if WARMUP_STEPS > 0:
         for _ in range(WARMUP_STEPS):
-            kernel(a,b,c,1,out)
+            kernel(a, b, c, 1, out)
         cp.cuda.Stream.null.synchronize()
     # Calibrage
     iters = 256
-    s=cp.cuda.Event(); e=cp.cuda.Event(); s.record(); kernel(a,b,c,iters,out); e.record(); e.synchronize();
-    ms = cp.cuda.get_elapsed_time(s,e)
+    s = cp.cuda.Event()
+    e = cp.cuda.Event()
+    s.record()
+    kernel(a, b, c, iters, out)
+    e.record()
+    e.synchronize()
+    ms = cp.cuda.get_elapsed_time(s, e)
     secs = ms/1000.0
-    if secs>0:
+    if secs > 0:
         scale = duration/secs
-        scale = min(max(scale,0.5),64.0)
-        iters = max(int(iters*scale),1)
+        scale = min(max(scale, 0.5), 64.0)
+        iters = max(int(iters*scale), 1)
 
     totals = {}
     times_ms = {}
+
     def worker(idx):
-        dev = cp.cuda.Device(idx); dev.use()
+        dev = cp.cuda.Device(idx)
+        dev.use()
         try:
             f_b, t_b = cp.cuda.runtime.memGetInfo()
             localN = _adjust_size_for_vram(xN, t_b, f_b)
@@ -509,23 +556,34 @@ def bench_cupy_multi(duration, device_indices, N, verbose):
         out = cp.empty_like(a)
         if WARMUP_STEPS > 0:
             for _ in range(WARMUP_STEPS):
-                kernel(a,b,c,1,out)
+                kernel(a, b, c, 1, out)
             cp.cuda.Stream.null.synchronize()
-        s=cp.cuda.Event(); e=cp.cuda.Event(); s.record(); kernel(a,b,c,iters,out); e.record(); e.synchronize();
-        times_ms[idx] = cp.cuda.get_elapsed_time(s,e)
+        s = cp.cuda.Event()
+        e = cp.cuda.Event()
+        s.record()
+        kernel(a, b, c, iters, out)
+        e.record()
+        e.synchronize()
+        times_ms[idx] = cp.cuda.get_elapsed_time(s, e)
         totals[idx] = 6.0 * iters * localN
         if verbose:
             used_bytes = 4*4*localN
             frac = used_bytes / t_b if 't_b' in locals() and t_b else 0.0
-            print(f"cupy dev{idx} multi VRAM target={VRAM_TARGET_FRAC*100:.1f}% alloc~{frac*100:.1f}% N={localN}")
+            print(
+                f"cupy dev{idx} multi VRAM target={VRAM_TARGET_FRAC*100:.1f}% alloc~{frac*100:.1f}% N={localN}")
 
-    threads = [threading.Thread(target=worker, args=(i,)) for i in device_indices]
-    for t in threads: t.start()
-    for t in threads: t.join()
+    threads = [threading.Thread(target=worker, args=(i,))
+               for i in device_indices]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join()
 
     if verbose:
-        names = [cp.cuda.runtime.getDeviceProperties(i)['name'].decode() for i in device_indices]
-        print(f"BACKEND cupy DEVICES {device_indices} NAMES {names} WARMUP {WARMUP_STEPS} ITERS {iters} TARGET {duration:.3f}s")
+        names = [cp.cuda.runtime.getDeviceProperties(
+            i)['name'].decode() for i in device_indices]
+        print(
+            f"BACKEND cupy DEVICES {device_indices} NAMES {names} WARMUP {WARMUP_STEPS} ITERS {iters} TARGET {duration:.3f}s")
 
     total_flops = sum(totals.values())
     max_time = max(times_ms.values())/1000.0
